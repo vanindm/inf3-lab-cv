@@ -17,7 +17,9 @@ template <class T> class Set : public ICollection<T> {
     Set(const Set<T> &set) : tree(set.tree) {}
     // Set(Sequence<T> *sequence) : tree() {
     // }
-    Set(std::function<bool(T)> f, Set<T> &set) { tree = BinaryTree<T>(f, tree); }
+    Set(std::function<bool(T)> f, Set<T> &set) {
+        tree = BinaryTree<T>(f, tree);
+    }
     void insert(T item) { tree.insert(item); }
     void erase(T item) {
         BinaryTreeNode<T> *element = tree.findElement(item);
@@ -29,12 +31,13 @@ template <class T> class Set : public ICollection<T> {
             "попытка удалить элемент, не лежащий в множестве");
     }
     void map(T (*f)(T)) { tree.map(f); }
-    T getByItem(T item) const { 
+    T getByItem(T item) const {
         auto node = tree.findElement(item);
         if (node == nullptr) {
-            throw std::out_of_range("попытка вернуть элемент, не лежащий в множестве");
+            throw std::out_of_range(
+                "попытка вернуть элемент, не лежащий в множестве");
         }
-        return node->getVal(); 
+        return node->getVal();
     }
     BinaryTreeNode<T> *getNodeByItem(T item) {
         return (tree.findElement(item));

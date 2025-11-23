@@ -62,9 +62,10 @@ template <class T> class LinkedList : IEnumerable<T> {
 
         virtual T &current() {
             if (isFirst) {
-                throw std::out_of_range("попытка получения несуществующего элемента связного списка");
+                throw std::out_of_range("попытка получения несуществующего "
+                                        "элемента связного списка");
             }
-            return (ptr->get()); 
+            return (ptr->get());
         }
 
         virtual void reset() {

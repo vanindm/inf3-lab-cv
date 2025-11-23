@@ -91,7 +91,8 @@ template <class T> class BinaryTree {
                                BinaryTreeNode<T> *parent = nullptr) const;
     void _erase(BinaryTreeNode<T> **current, BinaryTreeNode<T> *toErase);
     void _insertAll(const BinaryTreeNode<T> *node);
-    void _insertAllWhere(std::function<bool(T)> f, const BinaryTreeNode<T> *node);
+    void _insertAllWhere(std::function<bool(T)> f,
+                         const BinaryTreeNode<T> *node);
 
     size_t _size(BinaryTreeNode<T> *current) {
         if (current == nullptr)

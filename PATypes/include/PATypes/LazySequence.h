@@ -67,9 +67,8 @@ template <class T> class LazySequence {
     int leftmost_index;
     int rightmost_index;
     void _clearStorage(int index) {
-        std::function<bool(LazyStorage)> clearFunction = [index](const LazyStorage &a) {
-            return a.index < index;
-        };
+        std::function<bool(LazyStorage)> clearFunction =
+            [index](const LazyStorage &a) { return a.index < index; };
         storage = Set<LazyStorage>(clearFunction, storage);
     }
     bool IsCalculated(int index) { return storage.contains({index, T()}); }
@@ -160,14 +159,10 @@ template <class T> class LazySequence {
     }
     size_t GetMaterializedCount() const { return storage.GetLength(); }
 
-    int GetLeftmostIndex() const {
-        return leftmost_index;
-    }
+    int GetLeftmostIndex() const { return leftmost_index; }
 
-    int GetRightmostIndex() const {
-        return rightmost_index;
-    }
-    
+    int GetRightmostIndex() const { return rightmost_index; }
+
     LazySequence<T> *Append(T item) const {
         LazySequence<T> *newSeq = new LazySequence<T>(*this);
         ++(newSeq->rightmost_index);
