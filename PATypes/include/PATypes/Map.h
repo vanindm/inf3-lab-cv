@@ -8,24 +8,24 @@ namespace PATypes {
 	template<class K, class V>
 	class Map : IMap<K, V> {
 		class MapNode {
-			size_t index;
+			size_t key;
 			V val;
 
 		public:
-			MapNode(K index, V val) : index(std::hash<K>{}(index)), val(val) {}
-			MapNode(size_t indexHash, V val) : index(indexHash), val(val) {}
-			size_t getIndex() { return index; }
+			MapNode(K key, V val) : key(std::hash<K>{}(key)), val(val) {}
+			MapNode(size_t keyHash, V val) : key(keyHash), val(val) {}
+			size_t getKeyHash() { return key; }
 			V getValue() { return val; }
-			int operator<(const MapNode &b) const { return index < b.index; }
-			int operator<=(const MapNode &b) const { return index <= b.index; }
-			int operator==(const MapNode &b) const { return index == b.index; }
+			int operator<(const MapNode &b) const { return key < b.key; }
+			int operator<=(const MapNode &b) const { return key <= b.key; }
+			int operator==(const MapNode &b) const { return key == b.key; }
     	};
 		Set<MapNode> storage;
 		public:
 			Map() {}
-			virtual V Get(K index) const {
+			virtual V Get(K key) const {
 				try {
-					return storage.getByItem({std::hash<K>{}(index), {}}).getValue();
+					return storage.getByItem({std::hash<K>{}(key), {}}).getValue();
 				} catch (std::out_of_range& err) {
 					throw std::out_of_range("попытка найти элемент, не лежащий в ассоциативном массиве");
 				}
@@ -36,6 +36,9 @@ namespace PATypes {
 				} catch (std::logic_error&) {
 				}
 				storage.insert({std::hash<K>{}(index), value});
+			}
+			virtual void Delete(K key) {
+				storage.erase({std::hash<K>{}(key), {}});
 			}
 			virtual void Clear() {
 				storage = Set<MapNode>();

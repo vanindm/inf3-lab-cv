@@ -8,6 +8,6 @@ namespace PATypes {
 		// why
 		virtual void Add(K key, V value) = 0;
 		virtual void Clear() = 0;
-
+		virtual void Delete(K key) = 0;
 	};
 };

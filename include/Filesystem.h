@@ -12,17 +12,18 @@ namespace LabFS {
 		NODE_FILE,
 		NODE_DIRECTORY
 	};
-	class Node {
+	class Node : std::enable_shared_from_this<Node>{
 		std::shared_ptr<File> file;
 		std::string directoryName;
 		std::shared_ptr<PATypes::HashMap<std::string, std::shared_ptr<Node>>> subnodes; 
+		std::weak_ptr<Node> parent;
 	public:
 		Node() {
 		}
 		Node(File file) {
 			std::make_shared<File>(file);
 		}
-		Node(std::string directoryName) : directoryName(directoryName) {
+		Node(std::string directoryName, std::weak_ptr<Node> parent = std::weak_ptr<Node>()) : directoryName(directoryName), parent(parent) {
 			subnodes = std::make_shared<PATypes::HashMap<std::string, std::shared_ptr<Node>>>();
 		}
 		NodeType GetType() {
@@ -45,7 +46,7 @@ namespace LabFS {
 			if (file != nullptr) {
 				throw std::logic_error("попытка добавления директории файлу");
 			}
-			subnodes->Add(name, std::make_shared<Node>(name));
+			subnodes->Add(name, std::make_shared<Node>(name, weak_from_this()));
 		}
 		std::shared_ptr<PATypes::Sequence<std::shared_ptr<Node>>> GetChildren() {
 			return subnodes->GetAll();

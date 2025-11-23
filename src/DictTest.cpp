@@ -16,10 +16,18 @@ int main() {
 	stringDictionary.Add("fdsa", "bebebe");
 	assert(stringDictionary.Get("asdf") == "fdsa");
 	assert(stringDictionary.Get("fdsa") == "bebebe");
+	stringDictionary.Delete("fdsa");
+	bool caught = false;
+	try {
+		stringDictionary.Get("fdsa");
+	} catch (std::out_of_range& err) {
+		caught = true;
+	}
+	assert(caught);
+	caught = false;
 
 	PATypes::HashMap<int, int> intHashMap;
 	intHashMap.Add(1, 1);
-	bool caught = false;
 	assert(intHashMap.Get(1) == 1);
 	try {
 		intHashMap.Get(2);
@@ -27,5 +35,6 @@ int main() {
 		caught = true;
 	}
 	assert(caught);
+	caught = false;
 	return 0;
 }

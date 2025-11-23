@@ -61,6 +61,22 @@ namespace PATypes {
 			}
 			throw std::out_of_range("попытка найти элемент, не лежащий в HashMap");
 		}
+		virtual void Delete(K key) {
+			size_t hash = std::hash<K>{}(key) % mod;
+			std::shared_ptr<HashMapNode> current = storage.get(hash);
+			if (current->key == key) {
+				storage.set(hash, current->next);
+			}
+			std::shared_ptr<HashMapNode> prev = current;
+			current = current->next;
+			while(current->next != nullptr) {
+				if (current->key == key) {
+					prev->next = current->next;
+				}
+				prev = current;
+				current = current->next;
+			}
+		}
 		virtual void Clear() {
 			storage = DynamicArray<std::shared_ptr<HashMapNode>>(mod);
 		}
