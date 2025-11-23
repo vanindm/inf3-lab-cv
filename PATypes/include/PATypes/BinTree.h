@@ -88,7 +88,7 @@ template <class T> class BinaryTree {
     _split(BinaryTreeNode<T> *root, T key);
 
     BinaryTreeNode<T> *_search(BinaryTreeNode<T> *node, T key,
-                               BinaryTreeNode<T> *parent = nullptr);
+                               BinaryTreeNode<T> *parent = nullptr) const;
     void _erase(BinaryTreeNode<T> **current, BinaryTreeNode<T> *toErase);
     void _insertAll(const BinaryTreeNode<T> *node);
     void _insertAllWhere(std::function<bool(T)> f, const BinaryTreeNode<T> *node);
@@ -131,7 +131,7 @@ template <class T> class BinaryTree {
     void insert(T key);
     void erase(BinaryTreeNode<T> *node);
     BinaryTreeNode<T> *getRoot() { return root; };
-    BinaryTreeNode<T> *findElement(T val);
+    BinaryTreeNode<T> *findElement(T val) const;
     BinaryTree<T> getSubTree(BinaryTreeNode<T> *current);
     bool treesEqual(BinaryTreeNode<T> *tree1, BinaryTreeNode<T> *tree2);
 
@@ -306,7 +306,7 @@ template <class T> void BinaryTree<T>::insert(T key) {
 
 template <class T>
 BinaryTreeNode<T> *BinaryTree<T>::_search(BinaryTreeNode<T> *node, T key,
-                                          BinaryTreeNode<T> *parent) {
+                                          BinaryTreeNode<T> *parent) const {
     if (node == nullptr) {
         return node;
     } else if (key == node->getVal()) {
@@ -320,7 +320,7 @@ BinaryTreeNode<T> *BinaryTree<T>::_search(BinaryTreeNode<T> *node, T key,
     }
 }
 
-template <class T> BinaryTreeNode<T> *BinaryTree<T>::findElement(T val) {
+template <class T> BinaryTreeNode<T> *BinaryTree<T>::findElement(T val) const {
     return _search(root, val);
 }
 

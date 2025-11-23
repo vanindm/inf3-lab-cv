@@ -49,7 +49,7 @@ template <class T> class LinkedList : IEnumerable<T> {
         virtual ~Enumerator() {}
 
         virtual bool moveNext() {
-            if (ptr->getNext() == nullptr) {
+            if (!isFirst && ptr->getNext() == nullptr) {
                 return 0;
             }
             if (isFirst) {
@@ -60,7 +60,12 @@ template <class T> class LinkedList : IEnumerable<T> {
             return 1;
         }
 
-        virtual T &current() { return (ptr->get()); }
+        virtual T &current() {
+            if (isFirst) {
+                throw std::out_of_range("попытка получения несуществующего элемента связного списка");
+            }
+            return (ptr->get()); 
+        }
 
         virtual void reset() {
             isFirst = true;

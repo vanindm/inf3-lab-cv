@@ -1,0 +1,13 @@
+#pragma once
+
+namespace PATypes {
+	template<class K, class V>
+	class IMap {
+	public:
+		virtual V Get(K key) const = 0;
+		// why
+		virtual void Add(K key, V value) = 0;
+		virtual void Clear() = 0;
+
+	};
+};

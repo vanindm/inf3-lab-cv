@@ -15,7 +15,7 @@ template <class T> class DynamicArray : public IEnumerable<T> {
     DynamicArray(const DynamicArray<T> &dynamicArray);
     DynamicArray(int size, const DynamicArray<T> &dynamicArray);
     virtual ~DynamicArray();
-    T get(int index);
+    T get(int index) const;
     int getSize();
     void set(int index, T value);
     void resize(int newSize);
@@ -102,7 +102,7 @@ PATypes::DynamicArray<T>::DynamicArray(int size,
 
 template <class T> PATypes::DynamicArray<T>::~DynamicArray() { delete[] items; }
 
-template <class T> T PATypes::DynamicArray<T>::get(int index) {
+template <class T> T PATypes::DynamicArray<T>::get(int index) const {
     if (index < 0 || index > this->size)
         throw std::out_of_range(
             "Попытка обращения к элементу за границами динамического массива");
