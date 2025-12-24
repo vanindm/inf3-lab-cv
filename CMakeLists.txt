@@ -14,14 +14,14 @@ endif()
 
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++23 -Wall -g")
 
-add_executable(DictTestExec     src/DictTest.cpp)
+add_executable(HaarTestExec     src/HaarTest.cpp)
 
-target_include_directories(FSTestExec			PUBLIC ${PROJECT_SOURCE_DIR}/include)
+target_include_directories(HaarTestExec			PUBLIC ${PROJECT_SOURCE_DIR}/include)
 
 add_subdirectory(PATypes)
 
-target_link_libraries(DictTestExec  PATypes)
+target_link_libraries(HaarTestExec  PATypes)
 
 enable_testing()
 
-add_test(success_DictTest	DictTestExec)
+add_test(success_HaarTestExec	HaarTestExec)
