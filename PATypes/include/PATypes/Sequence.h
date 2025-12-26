@@ -224,9 +224,7 @@ template <class T> class MutableArraySequence : public ArraySequence<T> {
     MutableArraySequence(size_t size) : ArraySequence<T>(size) {}
     MutableArraySequence(T item) : ArraySequence<T>(item) {}
     PATypes::Sequence<T> *getSubsequence(int startIndex, int endIndex);
-    T& Getrvalue(int index) {
-        return this->array[index];
-    }
+    T &Getrvalue(int index) { return this->array[index]; }
 
   protected:
     ArraySequence<T> *Instance();

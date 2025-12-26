@@ -1,23 +1,41 @@
 #pragma once
 
+#include <functional>
 #include <memory>
 
 namespace CCTV {
-class IColor {};
+class IColor {
+  public:
+    virtual ~IColor() {}
+    virtual size_t GetHash() const = 0;
+};
 
-class IRGBColor : IColor {
+class IRGBColor : public IColor {
   public:
     virtual int GetR() const = 0;
     virtual int GetG() const = 0;
     virtual int GetB() const = 0;
+    virtual size_t GetHash() const {
+        return ((GetR() + GetG() * 31) % 4294967296 + GetB() * 31 * 31) %
+               4294967296;
+    }
+    virtual bool operator==(const IRGBColor& b) const {
+        return GetHash() == b.GetHash();
+    }
 };
 
-class IRGBAColor : IRGBColor {
+class IRGBAColor : public IRGBColor {
   public:
     virtual int GetA() const = 0;
+    virtual size_t GetHash() const {
+        return (((GetR() + GetG() * 31) % 4294967296 + GetB() * 31 * 31) %
+                    4294967296 +
+                GetA() * 31 * 31 * 31) %
+               4294967296;
+    }
 };
 
-class RGBAColor : IRGBAColor {
+class RGBAColor : public IRGBAColor {
     unsigned int RGBA;
 
   public:
@@ -32,7 +50,7 @@ class RGBAColor : IRGBAColor {
     virtual int GetA() const { return RGBA & 0xFF; }
 };
 
-class RGBColor : IRGBColor {
+class RGBColor : public IRGBColor {
     unsigned int RGB;
 
   public:
@@ -40,15 +58,15 @@ class RGBColor : IRGBColor {
     RGBColor(unsigned char colors[3]) {
         RGB = (colors[0] << 4) & (colors[1] << 2) & (colors[2]);
     }
-    RGBColor(const RGBAColor& col) {
-      RGB = (col.GetR() << 4) & (col.GetG() << 2) & (col.GetB());
+    RGBColor(const RGBAColor &col) {
+        RGB = (col.GetR() << 4) & (col.GetG() << 2) & (col.GetB());
     }
     virtual int GetR() const { return RGB & 0xFF0000; }
     virtual int GetG() const { return RGB & 0xFF00; }
     virtual int GetB() const { return RGB & 0xFF; }
 };
 
-class ERGBColor : IRGBColor {
+class ERGBColor : public IRGBColor {
     int R;
     int G;
     int B;
@@ -67,32 +85,41 @@ class ERGBColor : IRGBColor {
         G = color.GetG();
         B = color.GetB();
     }
-    ERGBColor(const RGBColor& color) {
-      R = color.GetR();
-      G = color.GetG();
-      B = color.GetB();
+    ERGBColor(const RGBColor &color) {
+        R = color.GetR();
+        G = color.GetG();
+        B = color.GetB();
     }
     ERGBColor(int R, int G, int B) : R(R), G(G), B(B) {}
-    virtual int GetR() const {
-      return R;
+    virtual int GetR() const { return R; }
+    virtual int GetG() const { return G; }
+    virtual int GetB() const { return B; }
+    ERGBColor operator+(const RGBColor &b) {
+        return ERGBColor(R + b.GetB(), G + b.GetG(), B + b.GetB());
     }
-    virtual int GetG() const {
-      return G;
+    ERGBColor operator+(const ERGBColor &b) {
+        return ERGBColor(R + b.R, G + b.G, B + b.B);
     }
-    virtual int GetB() const {
-      return B;
+    ERGBColor operator-(const RGBColor &b) {
+        return ERGBColor(R - b.GetB(), G - b.GetG(), B - b.GetB());
     }
-    ERGBColor operator+(const RGBColor& b) {
-      return ERGBColor(R + b.GetB(), G + b.GetG(), B + b.GetB());
-    }
-    ERGBColor operator+(const ERGBColor& b) {
-      return ERGBColor(R + b.R, G + b.G, B + b.B);
-    }
-    ERGBColor operator-(const RGBColor& b) {
-      return ERGBColor(R - b.GetB(), G - b.GetG(), B - b.GetB());
-    }
-    ERGBColor operator-(const ERGBColor& b) {
-      return ERGBColor(R - b.R, G - b.G, B - b.B);
+    ERGBColor operator-(const ERGBColor &b) {
+        return ERGBColor(R - b.R, G - b.G, B - b.B);
     }
 };
 } // namespace CCTV
+
+namespace std {
+template <> 
+struct hash<CCTV::IColor&> {
+    inline size_t operator()(const CCTV::IColor &clr) const noexcept {
+        return clr.GetHash();
+    }
+};
+template <> 
+struct hash<CCTV::IRGBColor&> {
+    inline size_t operator()(const CCTV::IRGBColor &clr) const noexcept {
+        return clr.GetHash();
+    }
+};
+} // namespace std
