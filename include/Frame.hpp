@@ -71,10 +71,14 @@ class Frame : public IFrame {
 		frame.data = nullptr;
 	}
 	virtual ~Frame() { stbi_image_free(data); }
-	static Frame FromFile(const std::string &filename) {
-		Frame newFrame;
-		newFrame.data = stbi_load(filename.c_str(), &newFrame.width,
-								  &newFrame.height, &newFrame.channels, 0);
+	static std::shared_ptr<Frame> FromFile(const std::string &filename) {
+		std::shared_ptr<Frame> newFrame = std::make_shared<Frame>(Frame());
+		newFrame->data = stbi_load(filename.c_str(), &newFrame->width,
+								  &newFrame->height, &newFrame->channels, 3);
+		newFrame->channels = 3;
+		if (!newFrame->data) {
+			throw std::runtime_error(stbi_failure_reason());
+		}
 		return newFrame;
 	}
 	std::shared_ptr<IRGBColor> GetPoint(const Dot &at) const {
@@ -109,6 +113,24 @@ class Frame : public IFrame {
 		}
 		return newFrame;
 	}
+	Frame Map(IRGBColor& (*f)(const IRGBColor& a)) const {
+		Frame newFrame(*this);
+		for (int i = 0; i < width * height; i += channels) {
+			IRGBColor& res = f(RGBColor(newFrame.data + i));
+			newFrame.data[i] = res.GetR();
+			newFrame.data[i + 1] = res.GetG();
+			newFrame.data[i + 2] = res.GetB();
+		}
+		return newFrame;
+	}
+	template<class T>
+	T Reduce(T (*f)(const T&, const IRGBColor&), IRGBColor& init) const {
+		T result = f(T(0), init);
+		for (int i = 0; i < width * height; i += channels) {
+			result = f(result, RGBColor(data + i));
+		}
+		return result;
+	}
 	double norm() const {
 		double res = 0;
 		for (int i = 0; i < width * height * channels; ++i) {
@@ -136,7 +158,31 @@ class Frame : public IFrame {
 class FrameSequence : public PATypes::MutableListSequence<Frame>,
 					  public IScoreable {
 	int windowLength;
+	double GetDeltaScore() {
+		int lastIndex = getLength() - 1;
+		if (lastIndex < 0 || windowLength < 2) {
+			return 0;
+		}
+		Frame result = get(lastIndex);
+		for (int i = 1; i < windowLength; ++i) {
+			result = result.AND(get(lastIndex - i));
+		}
+		return get(lastIndex).delta(result).norm();
+	}
+	double GetDeltaScore2() {
+		int lastIndex = getLength() - 1;
+		if (lastIndex < 0 || windowLength < 2) {
+			return 0;
+		}
+		double result = 0;
+		Frame lastFrame = get(lastIndex);
+		for (int i = 1; i < windowLength; ++i) {
+			result += lastFrame.delta(get(lastIndex - i)).norm();
+			lastFrame = get(lastIndex - i);
+		}
+		return result;
 
+	}
   public:
 	FrameSequence(Frame *items, int count, int windowLength)
 		: PATypes::MutableListSequence<Frame>(items, count),
@@ -158,6 +204,16 @@ class FrameSequence : public PATypes::MutableListSequence<Frame>,
 		}
 		return result;
 	}
+	static FrameSequence Where(bool (*f)(const Frame&), FrameSequence& sequence) {
+		FrameSequence seq(0);
+		auto enumerator = sequence.getEnumerator();
+		while (enumerator->moveNext()) {
+			if (f(enumerator->current())) {
+				seq.append(enumerator->current());
+			}
+		}
+		return seq;
+	}
 	FrameSequence(int windowLength)
 		: PATypes::MutableListSequence<Frame>(), windowLength(windowLength) {}
 	FrameSequence(Frame item, int windowLength)
@@ -170,15 +226,7 @@ class FrameSequence : public PATypes::MutableListSequence<Frame>,
 		return *this;
 	}
 	virtual double GetScore() {
-		int lastIndex = getLength() - 1;
-		if (lastIndex < 0 || windowLength < 2) {
-			return 0;
-		}
-		Frame result = get(lastIndex);
-		for (int i = 1; i < windowLength; ++i) {
-			result = result.AND(get(lastIndex - i));
-		}
-		return get(lastIndex).delta(result).norm();
+		return GetDeltaScore2() * 1.0;
 	}
 };
 } // namespace CCTV
