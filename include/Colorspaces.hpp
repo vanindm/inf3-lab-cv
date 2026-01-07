@@ -62,8 +62,8 @@ class RGBColor : public IRGBColor {
         RGB = (col.GetR() << 4) & (col.GetG() << 2) & (col.GetB());
     }
     virtual int GetR() const { return RGB & 0xFF0000; }
-    virtual int GetG() const { return RGB & 0xFF00; }
-    virtual int GetB() const { return RGB & 0xFF; }
+    virtual int GetG() const { return RGB & 0x00FF00; }
+    virtual int GetB() const { return RGB & 0x0000FF; }
 };
 
 class ERGBColor : public IRGBColor {

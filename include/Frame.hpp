@@ -9,6 +9,8 @@
 #include <PATypes/Sequence.h>
 #include <PATypes/HashMap.h>
 
+#include <GL/glew.h>
+
 #define STB_IMAGE_IMPLEMENTATION
 #include "contrib/stb_image.h"
 
@@ -30,11 +32,35 @@ class IIFrame {
 	virtual ~IIFrame() = 0;
 };
 
+class IGLTexture {
+	public:
+		virtual GLuint GetTexture() const = 0;
+		~IGLTexture() {};
+};
+
 class Frame : public IFrame {
 	unsigned char *data;
 	int width, height, channels;
 	Frame() : width(0), height(0), channels(0) {}
-	class FrameHistogram : IHistogram<IRGBColor, int> {
+	class GLTexture : public IGLTexture {
+		GLuint texture;
+	public:
+		GLTexture(const Frame &frame) {
+			glGenTextures(1, &texture);
+			glBindTexture(GL_TEXTURE_2D, texture);
+			glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+			glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+			glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
+			glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, frame.width, frame.height, 0, GL_RGB, GL_UNSIGNED_BYTE, frame.data);
+		}
+		virtual ~GLTexture() {
+			glDeleteTextures(1, &texture);
+		}
+		virtual GLuint GetTexture() const {
+			return texture;
+		}
+	};
+	class FrameHistogram : IHistogram<IRGBColor, int> { 
 		PATypes::HashMap<IRGBColor&, int> storage;
 	public:
 		FrameHistogram(const Frame& frame) {
@@ -70,6 +96,9 @@ class Frame : public IFrame {
 		data = frame.data;
 		frame.data = nullptr;
 	}
+	std::shared_ptr<IGLTexture> GetTexture() {
+		return std::make_shared<GLTexture>(*this);
+	}
 	virtual ~Frame() { stbi_image_free(data); }
 	static std::shared_ptr<Frame> FromFile(const std::string &filename) {
 		std::shared_ptr<Frame> newFrame = std::make_shared<Frame>(Frame());
@@ -80,6 +109,9 @@ class Frame : public IFrame {
 			throw std::runtime_error(stbi_failure_reason());
 		}
 		return newFrame;
+	}
+	const unsigned char* GetData() const {
+		return data;
 	}
 	std::shared_ptr<IRGBColor> GetPoint(const Dot &at) const {
 		std::shared_ptr<RGBColor> res =
@@ -94,6 +126,12 @@ class Frame : public IFrame {
 			newFrame.data[i] = std::abs((int)data[i] - b.data[i]);
 		}
 		return newFrame;
+	}
+	int GetWidth() const {
+		return width;
+	}
+	int GetHeight() const {
+		return height;
 	}
 	Frame XOR(const Frame &b) const {
 		Frame newFrame(*this);
