@@ -1,3 +1,6 @@
 [submodule "include/contrib/imgui"]
 	path = include/contrib/imgui
 	url = https://github.com/ocornut/imgui/
+[submodule "include/contrib/portable-file-dialogs"]
+	path = include/contrib/portable-file-dialogs
+	url = https://github.com/samhocevar/portable-file-dialogs
