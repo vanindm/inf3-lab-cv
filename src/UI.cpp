@@ -9,8 +9,15 @@
 #include <GL/glew.h>
 #include <SDL.h>
 
+extern "C" {
+#include "libavcodec/avcodec.h"
+#include "libavutil/mathematics.h"
+}
+
+#include <portable-file-dialogs.h>
+
 #include "Frame.hpp"
-#include <PATypes/Sequence.h> // PATypes::MutableArraySequence
+#include <PATypes/Sequence.h>
 
 static bool SequenceContains(PATypes::Sequence<int> &seq, int v) {
     for (int i = 0; i < seq.getLength(); ++i)
@@ -19,12 +26,23 @@ static bool SequenceContains(PATypes::Sequence<int> &seq, int v) {
     return false;
 }
 
-static CCTV::FrameSequence& OpenFrameSequence() {
+static CCTV::FrameSequence OpenFrameSequence(CCTV::FrameSequence &a) {
+    try {
+        std::vector<std::string> result =
+            pfd::open_file("Открыть видеофайл", "", {".mp4"}).result();
+        if (result.size() > 0)
+            return CCTV::FrameSequence::LoadFromVideo(result[0], 0);
+        else
+            return a;
+    } catch (const std::exception &e) {
+        return a;
+    }
 }
 
-static void DrawFrameSequenceTimeline(const char *id, CCTV::FrameSequence &frames,
-                          int *currentIndex, bool *playing, float *fps,
-                          float *zoomPxPerFrame,
+static void
+DrawFrameSequenceTimeline(const char *id, CCTV::FrameSequence &frames,
+                          int &currentIndex, bool &playing, float &fps,
+                          float &zoomPxPerFrame,
                           PATypes::MutableArraySequence<int> &markers) {
     const int n = frames.getLength();
     if (n <= 0) {
@@ -32,34 +50,36 @@ static void DrawFrameSequenceTimeline(const char *id, CCTV::FrameSequence &frame
         return;
     }
 
-    *currentIndex = std::clamp(*currentIndex, 0, n - 1);
+    currentIndex = std::clamp(currentIndex, 0, n - 1);
 
-    if (ImGui::Button(*playing ? "||" : "|>"))
-        *playing = !*playing;
+    if (ImGui::Button(playing ? "||" : "|>") || ImGui::Shortcut(ImGuiKey_Space))
+        playing = !playing;
 
     ImGui::SameLine();
     if (ImGui::Button("<<"))
-        *currentIndex = 0;
+        currentIndex = 0;
 
     ImGui::SameLine();
     if (ImGui::Button("<") || ImGui::Shortcut(ImGuiKey_LeftArrow))
-        *currentIndex = std::max(0, *currentIndex - 1);
+        currentIndex = std::max(0, currentIndex - 1);
 
     ImGui::SameLine();
     if (ImGui::Button(">") || ImGui::Shortcut(ImGuiKey_RightArrow))
-        *currentIndex = std::min(n - 1, *currentIndex + 1);
+        currentIndex = std::min(n - 1, currentIndex + 1);
 
     ImGui::SameLine();
     if (ImGui::Button(">>"))
-        *currentIndex = n - 1;
+        currentIndex = n - 1;
 
-    ImGui::SliderInt("Кадр", currentIndex, 0, n - 1);
-    ImGui::SliderFloat("К/с", fps, 1.0f, 120.0f, "%.1f");
-    ImGui::SliderFloat("Размер (пикс./кадр)", zoomPxPerFrame, 2.0f, 40.0f, "%.1f");
+    int windowLength = frames.GetWindow();
+    ImGui::SliderInt("Кадр", &currentIndex, 0, n - 1);
+    ImGui::SliderFloat("К/с", &fps, 1.0f, 120.0f, "%.1f");
+    ImGui::SliderInt("Размер окна", &windowLength, 0, frames.getLength());
+    frames.SetWindow(windowLength);
 
     if (ImGui::Button("Пометить текущий")) {
-        if (!SequenceContains(markers, *currentIndex))
-            markers.append(*currentIndex);
+        if (!SequenceContains(markers, currentIndex))
+            markers.append(currentIndex);
     }
     ImGui::SameLine();
     if (ImGui::Button("Удалить пометки")) {
@@ -67,13 +87,13 @@ static void DrawFrameSequenceTimeline(const char *id, CCTV::FrameSequence &frame
     }
 
     static float playAccum = 0.0f;
-    if (*playing) {
-        playAccum += ImGui::GetIO().DeltaTime * (*fps);
+    if (playing) {
+        playAccum += ImGui::GetIO().DeltaTime * (fps);
         while (playAccum >= 1.0f) {
             playAccum -= 1.0f;
-            (*currentIndex)++;
-            if (*currentIndex >= n)
-                *currentIndex = 0; // loop
+            (currentIndex)++;
+            if (currentIndex >= n)
+                currentIndex = 0;
         }
     } else {
         playAccum = 0.0f;
@@ -81,7 +101,7 @@ static void DrawFrameSequenceTimeline(const char *id, CCTV::FrameSequence &frame
 
     const float rowH = 28.0f;
     const float canvasH = 60.0f;
-    const float w = std::max(1.0f, *zoomPxPerFrame);
+    const float w = std::max(1.0f, zoomPxPerFrame);
     const float totalW = n * w;
 
     ImGui::Text("Кадры: %d", n);
@@ -92,7 +112,7 @@ static void DrawFrameSequenceTimeline(const char *id, CCTV::FrameSequence &frame
     ImVec2 p0 = ImGui::GetCursorScreenPos();
     ImDrawList *dl = ImGui::GetWindowDrawList();
 
-    ImGui::InvisibleButton("timeline_canvas", ImVec2(totalW, canvasH - 4.0f));
+    ImGui::Dummy(ImVec2(totalW, rowH - 4.0f));
     const bool hovered = ImGui::IsItemHovered();
 
     const float scrollX = ImGui::GetScrollX();
@@ -101,23 +121,23 @@ static void DrawFrameSequenceTimeline(const char *id, CCTV::FrameSequence &frame
 
     const float winW = ImGui::GetWindowContentRegionMax().x -
                        ImGui::GetWindowContentRegionMin().x;
-    //int i0 = (int)std::floor(scrollX / w) - 2;
-    //int i1 = (int)std::ceil((scrollX + winW) / w) + 2;
-    //i0 = std::max(0, i0);
-    //i1 = std::min(n - 1, i1);
+    // int i0 = (int)std::floor(scrollX / w) - 2;
+    // int i1 = (int)std::ceil((scrollX + winW) / w) + 2;
+    // i0 = std::max(0, i0);
+    // i1 = std::min(n - 1, i1);
 
-    dl->AddRectFilled(ImVec2(p0.x, p0.y), ImVec2(p0.x + winW, p0.y + canvasH),
-                      IM_COL32(20, 20, 20, 255));
+    // dl->AddRectFilled(ImVec2(p0.x, p0.y), ImVec2(p0.x + totalW, p0.y +
+    // canvasH), IM_COL32(20, 20, 20, 255)); dl->AddRectFilled(ImVec2(0,0),
+    // ImVec2(totalW, canvasH), IM_COL32(20, 20, 20, 255));
 
     for (int i = 0; i < n; ++i) {
         const float x0 = baseX + i * w;
         const float x1 = x0 + w - 1.0f;
 
-        ImU32 col = IM_COL32((60 + 160), (60 + 160),
-                             (60 + 160), 255);
+        ImU32 col = IM_COL32((60 + 160), (60 + 160), (60 + 160), 255);
         ImU32 border = IM_COL32(60, 60, 60, 255);
 
-        if (i == *currentIndex) {
+        if (i == currentIndex) {
             col = IM_COL32(90, 140, 220, 255);
             border = IM_COL32(220, 220, 220, 255);
         }
@@ -127,6 +147,7 @@ static void DrawFrameSequenceTimeline(const char *id, CCTV::FrameSequence &frame
         dl->AddRect(ImVec2(x0, baseY + 6.0f), ImVec2(x1, baseY + 6.0f + rowH),
                     border);
 
+        /*
         for (int m = 0; m < markers.getLength(); ++m) {
             if (markers.get(m) == i) {
                 ImVec2 a(x0 + 2.0f, baseY + 6.0f);
@@ -136,13 +157,14 @@ static void DrawFrameSequenceTimeline(const char *id, CCTV::FrameSequence &frame
                 break;
             }
         }
+        */
     }
 
     if (hovered && ImGui::IsMouseClicked(ImGuiMouseButton_Left)) {
         const float mx = ImGui::GetIO().MousePos.x - baseX;
         const int idx = (int)std::floor(mx / w);
         if (0 <= idx && idx < n)
-            *currentIndex = idx;
+            currentIndex = idx;
     }
 
     if (hovered) {
@@ -158,6 +180,8 @@ static void DrawFrameSequenceTimeline(const char *id, CCTV::FrameSequence &frame
     }
 
     ImGui::EndChild();
+    ImGui::SliderFloat("Масштаб (пикс./кадр)", &zoomPxPerFrame, 2.0f, 40.0f,
+                       "%.1f");
 }
 
 int main(int argc, char **argv) {
@@ -185,7 +209,7 @@ int main(int argc, char **argv) {
                           SDL_WINDOW_ALLOW_HIGHDPI);
 
     SDL_Window *window =
-        SDL_CreateWindow("Видеонаблюдение", SDL_WINDOWPOS_CENTERED,
+        SDL_CreateWindow("Анализ видеофайла", SDL_WINDOWPOS_CENTERED,
                          SDL_WINDOWPOS_CENTERED, 1000, 700, window_flags);
 
     SDL_GLContext gl_context = SDL_GL_CreateContext(window);
@@ -198,16 +222,7 @@ int main(int argc, char **argv) {
         return -1;
     }
 
-    // Load a FrameSequence from numbered PNGs.
-    // Adjust folder if your test assets live elsewhere.
-    // CCTV::FrameSequence frames =
-    // LoadNumberedPngSequence("../contrib/test/dynamic/", 5);
-
-	CCTV::FrameSequence frames(30);
-	for (int i = 1; i <= 150; i++) {
-		std::string res = std::to_string(i);
-		frames.append(*CCTV::Frame::FromFile("../contrib/test/explosion/" + res + ".png"));
-	}
+    CCTV::FrameSequence frames(30);
 
     int currentIndex = 0;
     bool playing = false;
@@ -254,7 +269,7 @@ int main(int argc, char **argv) {
         if (ImGui::BeginMainMenuBar()) {
             if (ImGui::BeginMenu("Файл")) {
                 if (ImGui::MenuItem("Открыть...", "Ctrl+O")) {
-					//frames = OpenFrameSequence();
+                    frames = OpenFrameSequence(frames);
                 }
                 if (ImGui::MenuItem("Выйти", "Ctrl+Q")) {
                     done = true;
@@ -264,17 +279,19 @@ int main(int argc, char **argv) {
             ImGui::EndMainMenuBar();
         }
 
-		if (ImGui::Shortcut(ImGuiMod_Ctrl | ImGuiKey_O, ImGuiInputFlags_RouteGlobal)) {
-			//frames = OpenFrameSequence();
-		}
+        if (ImGui::Shortcut(ImGuiMod_Ctrl | ImGuiKey_O,
+                            ImGuiInputFlags_RouteGlobal)) {
+            // frames = OpenFrameSequence();
+        }
 
-		if (ImGui::Shortcut(ImGuiMod_Ctrl | ImGuiKey_Q, ImGuiInputFlags_RouteGlobal)) {
-			done = true;
-		}
+        if (ImGui::Shortcut(ImGuiMod_Ctrl | ImGuiKey_Q,
+                            ImGuiInputFlags_RouteGlobal)) {
+            done = true;
+        }
 
-        if (ImGui::Begin("Timeline")) {
-            DrawFrameSequenceTimeline("frames_timeline", frames, &currentIndex,
-                                      &playing, &fps, &zoom, markers);
+        if (ImGui::Begin("Таймлайн")) {
+            DrawFrameSequenceTimeline("frames_timeline", frames, currentIndex,
+                                      playing, fps, zoom, markers);
             ImGui::End();
         }
 
@@ -284,7 +301,7 @@ int main(int argc, char **argv) {
                 CCTV::Frame frame = frames.get(currentIndex);
                 texture = frame.GetTexture();
 
-                ImGui::Text("Кадр: %d/ %d", currentIndex+1,
+                ImGui::Text("Кадр: %d/ %d", currentIndex + 1,
                             frames.getLength());
                 // ImGui::Text("Size: %d x %d", frame.GetWidth(),
                 // frame.GetHeight());
