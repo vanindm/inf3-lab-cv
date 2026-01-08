@@ -1,5 +1,7 @@
 #pragma once
 
+#include <utility>
+
 #include "DynamicArray.h"
 #include "ICollection.h"
 #include "LinkedList.h"
@@ -260,6 +262,9 @@ template <class T> class ListSequence : public Sequence<T> {
     ListSequence() : list() {};
     ListSequence(const ListSequence<T> &listSequence)
         : list(listSequence.list) {};
+    ListSequence(ListSequence<T> && seq) {
+        list = std::move(seq.list);
+    }
     ListSequence(Sequence<T> &sequence);
     ListSequence(T item) : list(&item, 1) {};
     virtual ~ListSequence() {};

@@ -1,5 +1,7 @@
 #pragma once
 
+#include <utility>
+
 namespace PATypes {
 
 template <class T> class LinkedListNode {
@@ -23,10 +25,14 @@ template <class T> class LinkedList : IEnumerable<T> {
     LinkedList();
     LinkedList(LinkedListNode<T> *start, int count);
     LinkedList(const LinkedList<T> &list);
+    LinkedList(LinkedList<T> &&list) {
+        size = std::exchange(list.size, 0);
+        head = std::exchange(list.head, nullptr);
+    }
     virtual ~LinkedList();
-    T getFirst();
-    T getLast();
-    T get(int index);
+    T& getFirst();
+    T& getLast();
+    T& get(int index);
     LinkedList<T> *getSubList(int startIndex, int endIndex);
     int getLength();
     void append(T item);
@@ -35,7 +41,16 @@ template <class T> class LinkedList : IEnumerable<T> {
     void removeAt(int index);
     LinkedList<T> *concat(LinkedList<T> *list);
     void map(T (*f)(T));
-    PATypes::LinkedList<T> &operator=(const LinkedList<T> &array);
+    PATypes::LinkedList<T> &operator=(const LinkedList<T> &other);
+    PATypes::LinkedList<T> &operator=(LinkedList<T> &&other) {
+        if (this == &other)
+            return *this;
+        if (this->head)
+            delete this->head;
+        this->head = std::exchange(other.head, nullptr);
+        this->size = std::exchange(other.size, 0);
+        return *this;
+    }
     IEnumerator<T> *getEnumerator() { return new Enumerator(*this); }
 
   private:
@@ -210,15 +225,15 @@ PATypes::LinkedListNode<T> &PATypes::LinkedList<T>::getLastNode() {
     return *current;
 }
 
-template <class T> T PATypes::LinkedList<T>::getFirst() {
+template <class T> T& PATypes::LinkedList<T>::getFirst() {
     return this->getFirstNode().get();
 }
 
-template <class T> T PATypes::LinkedList<T>::getLast() {
+template <class T> T& PATypes::LinkedList<T>::getLast() {
     return this->getLastNode().get();
 }
 
-template <class T> T PATypes::LinkedList<T>::get(int index) {
+template <class T> T& PATypes::LinkedList<T>::get(int index) {
     try {
         return this->getNode(index).get();
     } catch (std::out_of_range &) {
