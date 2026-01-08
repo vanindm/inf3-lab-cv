@@ -3,6 +3,6 @@
 namespace CCTV {
 	class IScoreable {
 	public:
-		virtual double GetScore() = 0;
+		virtual double GetScore(const std::optional<int>& r) = 0;
 	};
 };

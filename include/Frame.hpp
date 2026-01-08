@@ -9,6 +9,7 @@
 #include <PATypes/Sequence.h>
 #include <PATypes/HashMap.h>
 
+#include <optional>
 #include <GL/glew.h>
 
 #define STB_IMAGE_IMPLEMENTATION
@@ -41,7 +42,6 @@ class IGLTexture {
 class Frame : public IFrame {
 	unsigned char *data;
 	int width, height, channels;
-	Frame() : width(0), height(0), channels(0) {}
 	class GLTexture : public IGLTexture {
 		GLuint texture;
 	public:
@@ -83,6 +83,7 @@ class Frame : public IFrame {
 		}
 	};
   public:
+  	Frame() : width(0), height(0), channels(0) {}
 	Frame(const Frame &frame)
 		: width(frame.width), height(frame.height), channels(frame.channels) {
 		this->data =
@@ -96,10 +97,10 @@ class Frame : public IFrame {
 		data = frame.data;
 		frame.data = nullptr;
 	}
-	std::shared_ptr<IGLTexture> GetTexture() {
+	std::shared_ptr<IGLTexture> GetTexture() const {
 		return std::make_shared<GLTexture>(*this);
 	}
-	virtual ~Frame() { stbi_image_free(data); }
+	virtual ~Frame() { if (data) stbi_image_free(data); }
 	static std::shared_ptr<Frame> FromFile(const std::string &filename) {
 		std::shared_ptr<Frame> newFrame = std::make_shared<Frame>(Frame());
 		newFrame->data = stbi_load(filename.c_str(), &newFrame->width,
@@ -180,7 +181,8 @@ class Frame : public IFrame {
 	Frame &operator=(const Frame &other) {
 		if (this == &other)
 			return *this;
-		stbi_image_free(data);
+		if (data && width && height)
+			free(data);
 		this->data =
 			(unsigned char*) malloc(other.channels * other.width * other.height);
 		for (int i = 0; i < other.channels * other.width * other.height; ++i) {
@@ -207,18 +209,17 @@ class FrameSequence : public PATypes::MutableListSequence<Frame>,
 		}
 		return get(lastIndex).delta(result).norm();
 	}
-	double GetDeltaScore2() {
-		int lastIndex = getLength() - 1;
-		if (lastIndex < 0 || windowLength < 2) {
+	double GetDeltaScore2(int r) {
+		if (r < 0 || windowLength < 2) {
 			return 0;
 		}
 		double result = 0;
-		Frame lastFrame = get(lastIndex);
+		Frame lastFrame = get(r);
 		for (int i = 1; i < windowLength; ++i) {
-			result += lastFrame.delta(get(lastIndex - i)).norm();
-			lastFrame = get(lastIndex - i);
+			result += lastFrame.delta(get(r - i)).norm();
+			lastFrame = get(r - i);
 		}
-		return result;
+		return result / (double) windowLength;
 
 	}
   public:
@@ -263,8 +264,17 @@ class FrameSequence : public PATypes::MutableListSequence<Frame>,
 		}
 		return *this;
 	}
-	virtual double GetScore() {
-		return GetDeltaScore2() * 1.0;
+	int GetWindow() const {
+		return windowLength;
+	}
+	virtual double GetScore(const std::optional<int>& r = std::nullopt) {
+		if (r)
+			if (r >= this->getLength())
+				return 0;
+			else
+				return GetDeltaScore2(*r) * 1.0;
+		else
+			return GetDeltaScore2(this->getLength() - 1) * 1.0;
 	}
 };
 } // namespace CCTV

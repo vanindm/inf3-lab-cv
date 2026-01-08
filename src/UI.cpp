@@ -1,45 +1,196 @@
+#include <algorithm>
 #include <iostream>
-#include <imgui.h>
-#include <backends/imgui_impl_sdl2.h>
+#include <string>
+
 #include <backends/imgui_impl_opengl3.h>
+#include <backends/imgui_impl_sdl2.h>
+#include <imgui.h>
+
 #include <GL/glew.h>
 #include <SDL.h>
+
 #include "Frame.hpp"
+#include <PATypes/Sequence.h> // PATypes::MutableArraySequence
 
-#include <vector>
+static bool SequenceContains(PATypes::Sequence<int> &seq, int v) {
+    for (int i = 0; i < seq.getLength(); ++i)
+        if (seq.get(i) == v)
+            return true;
+    return false;
+}
 
-struct Keyframe {
-    float time;
-    float value;
-    bool selected = false;
-};
+static CCTV::FrameSequence& OpenFrameSequence() {
+}
 
-std::vector<Keyframe> keyframes;
-float timeline_min = 0.0f, timeline_max = 10.0f;
-float current_time = 0.0f;
-float zoom = 100.0f;  // pixels per unit time
-bool playing = false;
-float play_speed = 1.0f;
+static void DrawFrameSequenceTimeline(const char *id, CCTV::FrameSequence &frames,
+                          int *currentIndex, bool *playing, float *fps,
+                          float *zoomPxPerFrame,
+                          PATypes::MutableArraySequence<int> &markers) {
+    const int n = frames.getLength();
+    if (n <= 0) {
+        ImGui::TextUnformatted("Последовательность кадров пуста.");
+        return;
+    }
 
+    *currentIndex = std::clamp(*currentIndex, 0, n - 1);
 
-int main(int argc, char** argv) {
-	if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_TIMER) != 0) {
-		std::cout << "Error: " << SDL_GetError() << std::endl;
-		return 1;
-	}
-	const char* glsl_version = "#version 130";
+    if (ImGui::Button(*playing ? "||" : "|>"))
+        *playing = !*playing;
+
+    ImGui::SameLine();
+    if (ImGui::Button("<<"))
+        *currentIndex = 0;
+
+    ImGui::SameLine();
+    if (ImGui::Button("<") || ImGui::Shortcut(ImGuiKey_LeftArrow))
+        *currentIndex = std::max(0, *currentIndex - 1);
+
+    ImGui::SameLine();
+    if (ImGui::Button(">") || ImGui::Shortcut(ImGuiKey_RightArrow))
+        *currentIndex = std::min(n - 1, *currentIndex + 1);
+
+    ImGui::SameLine();
+    if (ImGui::Button(">>"))
+        *currentIndex = n - 1;
+
+    ImGui::SliderInt("Кадр", currentIndex, 0, n - 1);
+    ImGui::SliderFloat("К/с", fps, 1.0f, 120.0f, "%.1f");
+    ImGui::SliderFloat("Размер (пикс./кадр)", zoomPxPerFrame, 2.0f, 40.0f, "%.1f");
+
+    if (ImGui::Button("Пометить текущий")) {
+        if (!SequenceContains(markers, *currentIndex))
+            markers.append(*currentIndex);
+    }
+    ImGui::SameLine();
+    if (ImGui::Button("Удалить пометки")) {
+        markers = PATypes::MutableArraySequence<int>((size_t)0);
+    }
+
+    static float playAccum = 0.0f;
+    if (*playing) {
+        playAccum += ImGui::GetIO().DeltaTime * (*fps);
+        while (playAccum >= 1.0f) {
+            playAccum -= 1.0f;
+            (*currentIndex)++;
+            if (*currentIndex >= n)
+                *currentIndex = 0; // loop
+        }
+    } else {
+        playAccum = 0.0f;
+    }
+
+    const float rowH = 28.0f;
+    const float canvasH = 60.0f;
+    const float w = std::max(1.0f, *zoomPxPerFrame);
+    const float totalW = n * w;
+
+    ImGui::Text("Кадры: %d", n);
+
+    ImGui::BeginChild(id, ImVec2(0, canvasH), ImGuiChildFlags_Borders,
+                      ImGuiWindowFlags_HorizontalScrollbar);
+
+    ImVec2 p0 = ImGui::GetCursorScreenPos();
+    ImDrawList *dl = ImGui::GetWindowDrawList();
+
+    ImGui::InvisibleButton("timeline_canvas", ImVec2(totalW, canvasH - 4.0f));
+    const bool hovered = ImGui::IsItemHovered();
+
+    const float scrollX = ImGui::GetScrollX();
+    const float baseX = p0.x - scrollX;
+    const float baseY = p0.y;
+
+    const float winW = ImGui::GetWindowContentRegionMax().x -
+                       ImGui::GetWindowContentRegionMin().x;
+    //int i0 = (int)std::floor(scrollX / w) - 2;
+    //int i1 = (int)std::ceil((scrollX + winW) / w) + 2;
+    //i0 = std::max(0, i0);
+    //i1 = std::min(n - 1, i1);
+
+    dl->AddRectFilled(ImVec2(p0.x, p0.y), ImVec2(p0.x + winW, p0.y + canvasH),
+                      IM_COL32(20, 20, 20, 255));
+
+    for (int i = 0; i < n; ++i) {
+        const float x0 = baseX + i * w;
+        const float x1 = x0 + w - 1.0f;
+
+        ImU32 col = IM_COL32((60 + 160), (60 + 160),
+                             (60 + 160), 255);
+        ImU32 border = IM_COL32(60, 60, 60, 255);
+
+        if (i == *currentIndex) {
+            col = IM_COL32(90, 140, 220, 255);
+            border = IM_COL32(220, 220, 220, 255);
+        }
+
+        dl->AddRectFilled(ImVec2(x0, baseY + 6.0f),
+                          ImVec2(x1, baseY + 6.0f + rowH), col);
+        dl->AddRect(ImVec2(x0, baseY + 6.0f), ImVec2(x1, baseY + 6.0f + rowH),
+                    border);
+
+        for (int m = 0; m < markers.getLength(); ++m) {
+            if (markers.get(m) == i) {
+                ImVec2 a(x0 + 2.0f, baseY + 6.0f);
+                ImVec2 b(x0 + 10.0f, baseY + 6.0f);
+                ImVec2 c(x0 + 6.0f, baseY - 2.0f);
+                dl->AddTriangleFilled(a, b, c, IM_COL32(230, 170, 40, 255));
+                break;
+            }
+        }
+    }
+
+    if (hovered && ImGui::IsMouseClicked(ImGuiMouseButton_Left)) {
+        const float mx = ImGui::GetIO().MousePos.x - baseX;
+        const int idx = (int)std::floor(mx / w);
+        if (0 <= idx && idx < n)
+            *currentIndex = idx;
+    }
+
+    if (hovered) {
+        const float mx = ImGui::GetIO().MousePos.x - baseX;
+        const int idx = (int)std::floor(mx / w);
+        if (frames.GetWindow() <= idx && idx < n) {
+            float score = frames.GetScore(idx);
+            ImGui::BeginTooltip();
+            ImGui::Text("Кадр: %d", idx);
+            ImGui::Text("Важность : %.3f", score);
+            ImGui::EndTooltip();
+        }
+    }
+
+    ImGui::EndChild();
+}
+
+int main(int argc, char **argv) {
+    (void)argc;
+    (void)argv;
+
+    if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_TIMER) != 0) {
+        std::cout << "Error: " << SDL_GetError() << std::endl;
+        return 1;
+    }
+
+    const char *glsl_version = "#version 130";
+
     SDL_GL_SetAttribute(SDL_GL_CONTEXT_FLAGS, 0);
-    SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, SDL_GL_CONTEXT_PROFILE_CORE);
+    SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK,
+                        SDL_GL_CONTEXT_PROFILE_CORE);
     SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 3);
     SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 0);
     SDL_GL_SetAttribute(SDL_GL_DOUBLEBUFFER, 1);
     SDL_GL_SetAttribute(SDL_GL_DEPTH_SIZE, 24);
     SDL_GL_SetAttribute(SDL_GL_STENCIL_SIZE, 8);
-    SDL_WindowFlags window_flags = (SDL_WindowFlags)(SDL_WINDOW_OPENGL | SDL_WINDOW_RESIZABLE | SDL_WINDOW_ALLOW_HIGHDPI);
-    SDL_Window* window = SDL_CreateWindow("ImGui SDL2+OpenGL3 Image Display", SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, 800, 600, window_flags);
+
+    SDL_WindowFlags window_flags =
+        (SDL_WindowFlags)(SDL_WINDOW_OPENGL | SDL_WINDOW_RESIZABLE |
+                          SDL_WINDOW_ALLOW_HIGHDPI);
+
+    SDL_Window *window =
+        SDL_CreateWindow("Видеонаблюдение", SDL_WINDOWPOS_CENTERED,
+                         SDL_WINDOWPOS_CENTERED, 1000, 700, window_flags);
+
     SDL_GLContext gl_context = SDL_GL_CreateContext(window);
     SDL_GL_MakeCurrent(window, gl_context);
-    SDL_GL_SetSwapInterval(1); // Enable vsync
+    SDL_GL_SetSwapInterval(1); // vsync
 
     glewExperimental = GL_TRUE;
     if (glewInit() != GLEW_OK) {
@@ -47,21 +198,42 @@ int main(int argc, char** argv) {
         return -1;
     }
 
-    GLuint image_texture = 0;
-	std::shared_ptr<CCTV::Frame> test = CCTV::Frame::FromFile("../contrib/test/dynamic/1.png");	
-	std::shared_ptr<CCTV::IGLTexture> texture = test->GetTexture();
-    // Setup ImGui
+    // Load a FrameSequence from numbered PNGs.
+    // Adjust folder if your test assets live elsewhere.
+    // CCTV::FrameSequence frames =
+    // LoadNumberedPngSequence("../contrib/test/dynamic/", 5);
+
+	CCTV::FrameSequence frames(30);
+	for (int i = 1; i <= 150; i++) {
+		std::string res = std::to_string(i);
+		frames.append(*CCTV::Frame::FromFile("../contrib/test/explosion/" + res + ".png"));
+	}
+
+    int currentIndex = 0;
+    bool playing = false;
+    float fps = 24.0f;
+    float zoom = 10.0f;
+    PATypes::MutableArraySequence<int> markers((size_t)0);
+
     IMGUI_CHECKVERSION();
     ImGui::CreateContext();
-    ImGuiIO& io = ImGui::GetIO(); (void)io;
+    ImGuiIO &io = ImGui::GetIO();
+    (void)io;
     io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;
     ImGui::StyleColorsDark();
+
     ImGui_ImplSDL2_InitForOpenGL(window, gl_context);
     ImGui_ImplOpenGL3_Init(glsl_version);
 
-    ImVec4 clear_color = ImVec4(0.45f, 0.55f, 0.60f, 1.00f);
+    try {
+        io.Fonts->AddFontFromFileTTF("../contrib/cour.ttf", 12.0f, NULL,
+                                     io.Fonts->GetGlyphRangesCyrillic());
+    } catch (std::exception &e) {
+        std::cout << "Error: " << e.what() << std::endl;
+    }
 
-    // Main loop
+    ImVec4 clearColor = ImVec4(0.15f, 0.15f, 0.18f, 1.00f);
+
     bool done = false;
     while (!done) {
         SDL_Event event;
@@ -69,7 +241,9 @@ int main(int argc, char** argv) {
             ImGui_ImplSDL2_ProcessEvent(&event);
             if (event.type == SDL_QUIT)
                 done = true;
-            if (event.type == SDL_WINDOWEVENT && event.window.event == SDL_WINDOWEVENT_CLOSE && event.window.windowID == SDL_GetWindowID(window))
+            if (event.type == SDL_WINDOWEVENT &&
+                event.window.event == SDL_WINDOWEVENT_CLOSE &&
+                event.window.windowID == SDL_GetWindowID(window))
                 done = true;
         }
 
@@ -77,81 +251,61 @@ int main(int argc, char** argv) {
         ImGui_ImplSDL2_NewFrame();
         ImGui::NewFrame();
 
-        ImGui::Begin("Image Viewer");
-        if (texture != nullptr) {
-            ImGui::Text("Image size: %d x %d", test->GetWidth(), test->GetHeight());
-            ImGui::Image((ImTextureID)(intptr_t)texture->GetTexture(), ImVec2((float)test->GetWidth(), (float)test->GetHeight()));
-        } else {
-            ImGui::Text("No image loaded");
+        if (ImGui::BeginMainMenuBar()) {
+            if (ImGui::BeginMenu("Файл")) {
+                if (ImGui::MenuItem("Открыть...", "Ctrl+O")) {
+					//frames = OpenFrameSequence();
+                }
+                if (ImGui::MenuItem("Выйти", "Ctrl+Q")) {
+                    done = true;
+                }
+                ImGui::EndMenu();
+            }
+            ImGui::EndMainMenuBar();
         }
-        ImGui::End();
 
-		ImGui::Begin("Timeline & Image Viewer");
-
-		ImGui::SliderFloat("Zoom", &zoom, 20.0f, 500.0f);
-		ImGui::SliderFloat("Min Time", &timeline_min, -5.0f, 5.0f);
-		ImGui::SliderFloat("Max Time", &timeline_max, 5.0f, 15.0f);
-		if (ImGui::Button(playing ? "Pause" : "Play")) playing = !playing;
-		ImGui::SameLine(); ImGui::SliderFloat("Speed", &play_speed, 0.1f, 5.0f);
-
-		static float last_time = 0.0f;
-		float now = (float)SDL_GetTicks() / 1000.0f;
-		if (playing) {
-			current_time += (now - last_time) * play_speed;
-			if (current_time > timeline_max) current_time = timeline_min;
-		}
-		last_time = now;
-		ImGui::SliderFloat("Current Time", &current_time, timeline_min, timeline_max);
-
-		float anim_value = 0.0f;
-		keyframes = {
-    		{0.0f, 0.0f}, {2.0f, 1.0f}, {4.0f, -1.0f}, {6.0f, 0.5f}, {8.0f, 0.0f}, {10.0f, 1.0f}
-		};
-		for (size_t i = 0; i < keyframes.size(); ++i) {
-			if (current_time >= keyframes[i].time) {
-				anim_value = keyframes[i].value;
-				if (i + 1 < keyframes.size() && current_time < keyframes[i + 1].time) {
-					float t = (current_time - keyframes[i].time) / (keyframes[i + 1].time - keyframes[i].time);
-					anim_value = keyframes[i].value + t * (keyframes[i + 1].value - keyframes[i].value);
-				}
-			}
+		if (ImGui::Shortcut(ImGuiMod_Ctrl | ImGuiKey_O, ImGuiInputFlags_RouteGlobal)) {
+			//frames = OpenFrameSequence();
 		}
 
-		ImDrawList* draw_list = ImGui::GetWindowDrawList();
-		ImVec2 canvas_p0 = ImGui::GetCursorScreenPos();
-		ImVec2 canvas_sz(600, 100);
-		ImVec2 canvas_p1 = ImVec2(canvas_p0.x + canvas_sz.x, canvas_p0.y + canvas_sz.y);
-		draw_list->AddRectFilled(canvas_p0, canvas_p1, IM_COL32(50, 50, 50, 255));
-		draw_list->AddRect(canvas_p0, canvas_p1, IM_COL32(255, 255, 255, 255));
-
-		int tick_count = 10;
-		for (int i = 0; i <= tick_count; ++i) {
-			float t = timeline_min + (timeline_max - timeline_min) * i / tick_count;
-			ImVec2 tick_pos(canvas_p0.x + (t - timeline_min) / (timeline_max - timeline_min) * canvas_sz.x, canvas_p1.y);
-			draw_list->AddLine(ImVec2(tick_pos.x, canvas_p0.y), tick_pos, IM_COL32(255, 255, 255, 100));
-			//char buf[32]; ImFormatString(buf, 32, "%.1f", t);
-			draw_list->AddText(ImVec2(tick_pos.x - 20, canvas_p1.y + 5), IM_COL32(255, 255, 255, 255), "biba");
+		if (ImGui::Shortcut(ImGuiMod_Ctrl | ImGuiKey_Q, ImGuiInputFlags_RouteGlobal)) {
+			done = true;
 		}
 
-		for (auto& kf : keyframes) {
-			float x = canvas_p0.x + (kf.time - timeline_min) / (timeline_max - timeline_min) * canvas_sz.x;
-			ImVec2 kf_center(x, canvas_p0.y + canvas_sz.y * 0.5f);
-			//ImVec2 kf_pos = kf_center - ImVec2(5, 5);
-			ImU32 col = kf.selected ? IM_COL32(255, 255, 0, 255) : IM_COL32(0, 255, 0, 255);
-			draw_list->AddCircleFilled(kf_center, 5.0f, col);
-			if (ImGui::IsItemHovered() && ImGui::IsMouseClicked(0)) kf.selected = true;
-		}
+        if (ImGui::Begin("Timeline")) {
+            DrawFrameSequenceTimeline("frames_timeline", frames, &currentIndex,
+                                      &playing, &fps, &zoom, markers);
+            ImGui::End();
+        }
 
-		ImVec2 scrubber_top(canvas_p0.x + (current_time - timeline_min) / (timeline_max - timeline_min) * canvas_sz.x, canvas_p0.y);
-		ImVec2 scrubber_bot = ImVec2(scrubber_top.x, canvas_p1.y);
-		draw_list->AddLine(scrubber_top, scrubber_bot, IM_COL32(255, 0, 0, 255), 2.0f);
+        std::shared_ptr<CCTV::IGLTexture> texture;
+        if (ImGui::Begin("Просмотр кадра")) {
+            if (frames.getLength() > 0) {
+                CCTV::Frame frame = frames.get(currentIndex);
+                texture = frame.GetTexture();
 
-		ImGui::Dummy(canvas_sz);
-		ImGui::End();
+                ImGui::Text("Кадр: %d/ %d", currentIndex+1,
+                            frames.getLength());
+                // ImGui::Text("Size: %d x %d", frame.GetWidth(),
+                // frame.GetHeight());
+
+                if (texture) {
+                    ImGui::Image((ImTextureID)(intptr_t)texture->GetTexture(),
+                                 ImVec2((float)frame.GetWidth(),
+                                        (float)frame.GetHeight()));
+                } else {
+                    ImGui::TextUnformatted("Текстура не подгружена.");
+                }
+            } else {
+                ImGui::TextUnformatted("Кадры не загружены.");
+            }
+            ImGui::End();
+        }
 
         glViewport(0, 0, (int)io.DisplaySize.x, (int)io.DisplaySize.y);
-        glClearColor(clear_color.x, clear_color.y, clear_color.z, clear_color.w);
+        glClearColor(clearColor.x, clearColor.y, clearColor.z, clearColor.w);
         glClear(GL_COLOR_BUFFER_BIT);
+
         ImGui::Render();
         ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
         SDL_GL_SwapWindow(window);
@@ -160,7 +314,7 @@ int main(int argc, char** argv) {
     ImGui_ImplOpenGL3_Shutdown();
     ImGui_ImplSDL2_Shutdown();
     ImGui::DestroyContext();
-    glDeleteTextures(1, &image_texture);
+
     SDL_GL_DeleteContext(gl_context);
     SDL_DestroyWindow(window);
     SDL_Quit();

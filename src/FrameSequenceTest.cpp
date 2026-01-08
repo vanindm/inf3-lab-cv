@@ -5,7 +5,7 @@
 int main() {
 	CCTV::Frame frameStatic[] = {*CCTV::Frame::FromFile("../contrib/test/static/1.png"), *CCTV::Frame::FromFile("../contrib/test/static/2.png"), *CCTV::Frame::FromFile("../contrib/test/static/3.png"), *CCTV::Frame::FromFile("../contrib/test/static/4.png")};
 	CCTV::FrameSequence seqS(frameStatic, 3, 3);
-	std::cout << seqS.GetScore() << std::endl;
+	std::cout << seqS.GetScore(std::nullopt) << std::endl;
 
 	CCTV::Frame frameDynamic[] = {*CCTV::Frame::FromFile("../contrib/test/dynamic/1.png"), *CCTV::Frame::FromFile("../contrib/test/dynamic/2.png"), *CCTV::Frame::FromFile("../contrib/test/dynamic/3.png"), *CCTV::Frame::FromFile("../contrib/test/dynamic/4.png")};
 	CCTV::FrameSequence seqD(frameDynamic, 4, 4);
