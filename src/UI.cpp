@@ -8,6 +8,8 @@
 
 #include <GL/glew.h>
 #include <SDL.h>
+#include <SDL_image.h>
+#include <SDL_surface.h>
 
 extern "C" {
 #include "libavcodec/avcodec.h"
@@ -19,23 +21,21 @@ extern "C" {
 #include "Frame.hpp"
 #include <PATypes/Sequence.h>
 
-static bool SequenceContains(PATypes::Sequence<int> &seq, int v) {
-    for (int i = 0; i < seq.getLength(); ++i)
-        if (seq.get(i) == v)
-            return true;
-    return false;
-}
+static std::string currentError;
+static bool errorPopupOpen = 0;
 
-static CCTV::FrameSequence OpenFrameSequence(CCTV::FrameSequence &a) {
+static CCTV::FrameSequence OpenFrameSequence() {
     try {
         std::vector<std::string> result =
-            pfd::open_file("Открыть видеофайл", "", {".mp4"}).result();
+            pfd::open_file("Открыть видеофайл", "", {"*"}).result();
         if (result.size() > 0)
             return CCTV::FrameSequence::LoadFromVideo(result[0], 0);
         else
-            return a;
+            throw std::invalid_argument("Пользователь не выбрал файл");
+    } catch (const std::invalid_argument& e) {
+        throw e;
     } catch (const std::exception &e) {
-        return a;
+        throw std::runtime_error(e.what());
     }
 }
 
@@ -77,14 +77,7 @@ DrawFrameSequenceTimeline(const char *id, CCTV::FrameSequence &frames,
     ImGui::SliderInt("Размер окна", &windowLength, 0, frames.getLength());
     frames.SetWindow(windowLength);
 
-    if (ImGui::Button("Пометить текущий")) {
-        if (!SequenceContains(markers, currentIndex))
-            markers.append(currentIndex);
-    }
-    ImGui::SameLine();
-    if (ImGui::Button("Удалить пометки")) {
-        markers = PATypes::MutableArraySequence<int>((size_t)0);
-    }
+    frames.SetFramerate(fps);
 
     static float playAccum = 0.0f;
     if (playing) {
@@ -118,17 +111,6 @@ DrawFrameSequenceTimeline(const char *id, CCTV::FrameSequence &frames,
     const float scrollX = ImGui::GetScrollX();
     const float baseX = p0.x - scrollX;
     const float baseY = p0.y;
-
-    const float winW = ImGui::GetWindowContentRegionMax().x -
-                       ImGui::GetWindowContentRegionMin().x;
-    // int i0 = (int)std::floor(scrollX / w) - 2;
-    // int i1 = (int)std::ceil((scrollX + winW) / w) + 2;
-    // i0 = std::max(0, i0);
-    // i1 = std::min(n - 1, i1);
-
-    // dl->AddRectFilled(ImVec2(p0.x, p0.y), ImVec2(p0.x + totalW, p0.y +
-    // canvasH), IM_COL32(20, 20, 20, 255)); dl->AddRectFilled(ImVec2(0,0),
-    // ImVec2(totalW, canvasH), IM_COL32(20, 20, 20, 255));
 
     for (int i = 0; i < n; ++i) {
         const float x0 = baseX + i * w;
@@ -181,7 +163,7 @@ DrawFrameSequenceTimeline(const char *id, CCTV::FrameSequence &frames,
 
     ImGui::EndChild();
     ImGui::SliderFloat("Масштаб (пикс./кадр)", &zoomPxPerFrame, 2.0f, 40.0f,
-                       "%.1f");
+                       "%.1f", ImGuiSliderFlags_Logarithmic);
 }
 
 int main(int argc, char **argv) {
@@ -212,9 +194,13 @@ int main(int argc, char **argv) {
         SDL_CreateWindow("Анализ видеофайла", SDL_WINDOWPOS_CENTERED,
                          SDL_WINDOWPOS_CENTERED, 1000, 700, window_flags);
 
+    SDL_Surface* favicon = IMG_Load("../contrib/favicon.png");
+    SDL_SetWindowIcon(window, favicon);
+    SDL_FreeSurface(favicon);
+
     SDL_GLContext gl_context = SDL_GL_CreateContext(window);
     SDL_GL_MakeCurrent(window, gl_context);
-    SDL_GL_SetSwapInterval(1); // vsync
+    SDL_GL_SetSwapInterval(1);
 
     glewExperimental = GL_TRUE;
     if (glewInit() != GLEW_OK) {
@@ -226,7 +212,7 @@ int main(int argc, char **argv) {
 
     int currentIndex = 0;
     bool playing = false;
-    float fps = 24.0f;
+    float fps = frames.GetFramerate();
     float zoom = 10.0f;
     PATypes::MutableArraySequence<int> markers((size_t)0);
 
@@ -241,7 +227,7 @@ int main(int argc, char **argv) {
     ImGui_ImplOpenGL3_Init(glsl_version);
 
     try {
-        io.Fonts->AddFontFromFileTTF("../contrib/cour.ttf", 12.0f, NULL,
+        io.Fonts->AddFontFromFileTTF("../contrib/cour.ttf", 14.0f, NULL,
                                      io.Fonts->GetGlyphRangesCyrillic());
     } catch (std::exception &e) {
         std::cout << "Error: " << e.what() << std::endl;
@@ -250,6 +236,7 @@ int main(int argc, char **argv) {
     ImVec4 clearColor = ImVec4(0.15f, 0.15f, 0.18f, 1.00f);
 
     bool done = false;
+
     while (!done) {
         SDL_Event event;
         while (SDL_PollEvent(&event)) {
@@ -266,10 +253,30 @@ int main(int argc, char **argv) {
         ImGui_ImplSDL2_NewFrame();
         ImGui::NewFrame();
 
+        if (errorPopupOpen) {
+            ImGui::OpenPopup("Ошибка");
+        }
+
+        if (ImGui::BeginPopupModal("Ошибка", &errorPopupOpen, ImGuiWindowFlags_AlwaysAutoResize)) {
+            ImGui::Text(currentError.c_str());
+            if (ImGui::Button("Закрыть", ImVec2(60, 0))) {
+                ImGui::CloseCurrentPopup();
+                errorPopupOpen = 0;
+            }
+            ImGui::EndPopup();
+        }
+
         if (ImGui::BeginMainMenuBar()) {
             if (ImGui::BeginMenu("Файл")) {
                 if (ImGui::MenuItem("Открыть...", "Ctrl+O")) {
-                    frames = OpenFrameSequence(frames);
+                    try {
+                        frames = OpenFrameSequence();
+                        fps = frames.GetFramerate();
+                    } catch (const std::invalid_argument& e) {
+                    } catch (const std::runtime_error &e) {
+                        currentError = std::string(e.what());
+                        errorPopupOpen = true;
+                    }
                 }
                 if (ImGui::MenuItem("Выйти", "Ctrl+Q")) {
                     done = true;
@@ -281,7 +288,7 @@ int main(int argc, char **argv) {
 
         if (ImGui::Shortcut(ImGuiMod_Ctrl | ImGuiKey_O,
                             ImGuiInputFlags_RouteGlobal)) {
-            // frames = OpenFrameSequence();
+            frames = OpenFrameSequence();
         }
 
         if (ImGui::Shortcut(ImGuiMod_Ctrl | ImGuiKey_Q,
@@ -293,18 +300,18 @@ int main(int argc, char **argv) {
             DrawFrameSequenceTimeline("frames_timeline", frames, currentIndex,
                                       playing, fps, zoom, markers);
             ImGui::End();
+        } else {
+            ImGui::End();
         }
 
         std::shared_ptr<CCTV::IGLTexture> texture;
-        if (ImGui::Begin("Просмотр кадра")) {
+        if (ImGui::Begin("Просмотр кадра", nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
             if (frames.getLength() > 0) {
                 CCTV::Frame frame = frames.get(currentIndex);
                 texture = frame.GetTexture();
 
                 ImGui::Text("Кадр: %d/ %d", currentIndex + 1,
                             frames.getLength());
-                // ImGui::Text("Size: %d x %d", frame.GetWidth(),
-                // frame.GetHeight());
 
                 if (texture) {
                     ImGui::Image((ImTextureID)(intptr_t)texture->GetTexture(),
@@ -316,6 +323,8 @@ int main(int argc, char **argv) {
             } else {
                 ImGui::TextUnformatted("Кадры не загружены.");
             }
+            ImGui::End();
+        } else {
             ImGui::End();
         }
 

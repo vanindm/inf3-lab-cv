@@ -4,6 +4,7 @@ project(lab-cv)
 set(LABCV_SRC_LIST src/*.cpp)
 
 find_package(SDL2 REQUIRED CONFIG REQUIRED COMPONENTS SDL2)
+find_package(SDL2_image REQUIRED)
 find_package(GLEW REQUIRED)
 find_package(PkgConfig REQUIRED)
 if (PkgConfig_FOUND)
@@ -43,6 +44,7 @@ target_link_libraries(UI					imgui imgui_impl_sdl2 imgui_impl_opengl3 SDL2::SDL2
 target_link_libraries(UI					PkgConfig::FFMPEG)
 target_link_libraries(UI					portable_file_dialogs)
 target_link_libraries(UI 					${SDL2_LIBRARIES})
+target_link_libraries(UI 					SDL2_image)
 
 enable_testing()
 
