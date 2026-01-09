@@ -239,29 +239,39 @@ class FrameSequence : public PATypes::MutableListSequence<Frame>,
         return result / (double)windowLength;
     }
     PATypes::HashMap<int, double> cache;
+    float frameRate;
 
   public:
     FrameSequence() : PATypes::MutableListSequence<Frame>(), cache() {}
     FrameSequence(Frame *items, int count, int windowLength)
         : PATypes::MutableListSequence<Frame>(items, count),
-          windowLength(windowLength), cache() {}
+          windowLength(windowLength), cache(), frameRate(12) {}
     FrameSequence(PATypes::Sequence<Frame> &sequence, int windowLength)
         : PATypes::MutableListSequence<Frame>(sequence),
-          windowLength(windowLength), cache() {}
+          windowLength(windowLength), cache(), frameRate(12) {}
+    FrameSequence(FrameSequence &sequence)
+        : PATypes::MutableListSequence<Frame>(
+              (PATypes::Sequence<Frame> &)sequence),
+          windowLength(sequence.windowLength), cache(sequence.cache),
+          frameRate(sequence.frameRate) {}
+    FrameSequence(FrameSequence &&sequence)
+        : PATypes::MutableListSequence<Frame>(std::move(sequence)),
+          windowLength(sequence.windowLength),
+          frameRate(sequence.frameRate) {
+            cache = std::move(sequence.cache);
+          }
     FrameSequence(int windowLength)
         : PATypes::MutableListSequence<Frame>(), windowLength(windowLength),
-          cache() {}
+          cache(), frameRate(12) {}
     FrameSequence(Frame item, int windowLength)
         : PATypes::MutableListSequence<Frame>(), windowLength(windowLength),
-          cache() {}
+          cache(), frameRate(12) {}
     static FrameSequence LoadFromVideo(const std::string &filename,
                                        int windowSize) {
         FrameSequence result(windowSize);
 
-        const AVCodec *codec = NULL;
         AVFormatContext *fmt_ctx = NULL;
         AVCodecContext *dec_ctx = NULL;
-        AVInputFormat *fmt = NULL;
         AVPacket *pkt = av_packet_alloc();
         AVFrame *frame = av_frame_alloc();
         int streamIndex;
@@ -278,21 +288,8 @@ class FrameSequence : public PATypes::MutableListSequence<Frame>,
                                AVMEDIA_TYPE_VIDEO) < 0) {
             throw std::logic_error("Ошибка при загрузке видео");
         }
-        AVStream *stream = fmt_ctx->streams[streamIndex];
-
-        int width = dec_ctx->width;
-        int height = dec_ctx->height;
-        AVPixelFormat pix_fmt = dec_ctx->pix_fmt;
-        int dst_linesize[4];
         AVFrame *frameRGB;
         uint8_t *buffer;
-
-        unsigned char *data;
-
-        // if (av_image_alloc(&data, dst_linesize, width, height, pix_fmt, 1) !=
-        //     0) {
-        //     std::logic_error("Ошибка при загрузке видео");
-        // }
 
         int ret = 0;
 
@@ -334,11 +331,10 @@ class FrameSequence : public PATypes::MutableListSequence<Frame>,
                                          dec_ctx->width, dec_ctx->height, 1);
 
                     sws_scale(sws_ctx, (uint8_t const *const *)frame->data,
-                              frame->linesize, 0, dec_ctx->height, frameRGB->data,
-                              frameRGB->linesize);
+                              frame->linesize, 0, dec_ctx->height,
+                              frameRGB->data, frameRGB->linesize);
 
-                    result.append(Frame(dec_ctx->width, dec_ctx->height,
-                                        3,
+                    result.append(Frame(dec_ctx->width, dec_ctx->height, 3,
                                         (unsigned char *)frameRGB->data[0]));
 
                     av_frame_unref(frame);
@@ -355,6 +351,8 @@ class FrameSequence : public PATypes::MutableListSequence<Frame>,
         sws_freeContext(sws_ctx);
         av_free(buffer);
         av_frame_free(&frameRGB);
+
+        result.frameRate = dec_ctx->framerate.num / dec_ctx->framerate.den;
 
         return result;
     }
@@ -418,6 +416,26 @@ class FrameSequence : public PATypes::MutableListSequence<Frame>,
         } else {
             return GetDeltaScore2(this->getLength() - 1) * 1.0;
         }
+    }
+    float GetFramerate() const { return frameRate; }
+    void SetFramerate(const float &frameRate) { this->frameRate = frameRate; }
+    FrameSequence& operator=(const FrameSequence& other) {
+        if (this == &other)
+            return *this;
+        MutableListSequence<Frame>::operator=(other);
+        windowLength = other.windowLength;
+        cache = other.cache;
+        frameRate = other.frameRate;
+        return *this;
+    }
+    FrameSequence& operator=(FrameSequence&& other) {
+        if (this == &other)
+            return *this;
+        MutableListSequence<Frame>::operator=(other);
+        windowLength = other.windowLength;
+        cache = std::move(other.cache);
+        frameRate = other.frameRate;
+        return *this;
     }
 };
 } // namespace CCTV
