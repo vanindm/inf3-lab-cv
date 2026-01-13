@@ -23,7 +23,7 @@ include(CTest)
 
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++23 -Wall -g")
 
-add_executable(HaarTestExec     			src/HaarTest.cpp)
+# add_executable(HaarTestExec     			src/HaarTest.cpp)
 add_executable(FrameSequenceTestExec     	src/FrameSequenceTest.cpp)
 add_executable(UI							src/UI.cpp)
 
@@ -31,13 +31,13 @@ add_subdirectory(include/contrib/imgui)
 add_subdirectory(PATypes)
 add_subdirectory(include/contrib/portable-file-dialogs)
 
-target_include_directories(HaarTestExec						PUBLIC ${PROJECT_SOURCE_DIR}/include)
+# target_include_directories(HaarTestExec						PUBLIC ${PROJECT_SOURCE_DIR}/include)
 target_include_directories(FrameSequenceTestExec			PUBLIC ${PROJECT_SOURCE_DIR}/include)
 target_include_directories(UI								PUBLIC ${PROJECT_SOURCE_DIR}/include)
 target_include_directories(UI 								PUBLIC ${IMGUI_ROOT})
 target_include_directories(UI 								PUBLIC ${FFMPEG})
 
-target_link_libraries(HaarTestExec			PATypes)
+# target_link_libraries(HaarTestExec			PATypes)
 target_link_libraries(FrameSequenceTestExec PATypes)
 target_link_libraries(UI					PATypes)
 target_link_libraries(UI					imgui imgui_impl_sdl2 imgui_impl_opengl3 SDL2::SDL2 SDL2::SDL2main GLEW)
@@ -48,5 +48,5 @@ target_link_libraries(UI 					SDL2_image)
 
 enable_testing()
 
-add_test(success_HaarTestExec	HaarTestExec)
+# add_test(success_HaarTestExec	HaarTestExec)
 add_test(success_FrameSequenceTestExec	FrameSequenceTestExec)

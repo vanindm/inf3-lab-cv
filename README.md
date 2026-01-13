@@ -2,10 +2,14 @@
 
 ## Зависимости
 
-Компилятор, совместимый со стандартом C++11; CMake
+- Компилятор, совместимый со стандартом C++23
+- CMake
+- GLEW 
+- libavcodec
+- SDL2
 
 ```bash
-pacman -Syu gcc cmake
+pacman -Syu gcc cmake ffmpeg glew pkgconf base-devel sdl2-compat sdl2_image sdl2_ttf
 ```
 
 ## Компиляция
@@ -23,5 +27,7 @@ make
 cd build
 ctest
 ```
+
+![Демонстрация работы](./contrib/demo.png)
 
 ![МИФИ](./contrib/mephi.png)
