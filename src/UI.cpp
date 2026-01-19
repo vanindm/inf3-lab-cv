@@ -32,18 +32,23 @@ static CCTV::FrameSequence OpenFrameSequence() {
             return CCTV::FrameSequence::LoadFromVideo(result[0], 0);
         else
             throw std::invalid_argument("Пользователь не выбрал файл");
-    } catch (const std::invalid_argument& e) {
+    } catch (const std::invalid_argument &e) {
         throw e;
     } catch (const std::exception &e) {
         throw std::runtime_error(e.what());
     }
 }
 
-static void
-DrawFrameSequenceTimeline(const char *id, CCTV::FrameSequence &frames,
-                          int &currentIndex, bool &playing, float &fps,
-                          float &zoomPxPerFrame,
-                          PATypes::MutableArraySequence<int> &markers) {
+static void DisplayEvents(CCTV::FrameSequence &frames) {
+    ImGui::BeginChild("EventList", ImVec2(200, 200));
+    ImGui::Selectable("Событие 1");
+    ImGui::EndChild();
+}
+
+static void DrawFrameSequenceTimeline(const char *id,
+                                      CCTV::FrameSequence &frames,
+                                      int &currentIndex, bool &playing,
+                                      float &fps, float &zoomPxPerFrame) {
     const int n = frames.getLength();
     if (n <= 0) {
         ImGui::TextUnformatted("Последовательность кадров пуста.");
@@ -194,7 +199,7 @@ int main(int argc, char **argv) {
         SDL_CreateWindow("Анализ видеофайла", SDL_WINDOWPOS_CENTERED,
                          SDL_WINDOWPOS_CENTERED, 1000, 700, window_flags);
 
-    SDL_Surface* favicon = IMG_Load("../contrib/favicon.png");
+    SDL_Surface *favicon = IMG_Load("../contrib/favicon.png");
     SDL_SetWindowIcon(window, favicon);
     SDL_FreeSurface(favicon);
 
@@ -214,7 +219,6 @@ int main(int argc, char **argv) {
     bool playing = false;
     float fps = frames.GetFramerate();
     float zoom = 10.0f;
-    PATypes::MutableArraySequence<int> markers((size_t)0);
 
     IMGUI_CHECKVERSION();
     ImGui::CreateContext();
@@ -257,8 +261,9 @@ int main(int argc, char **argv) {
             ImGui::OpenPopup("Ошибка");
         }
 
-        if (ImGui::BeginPopupModal("Ошибка", &errorPopupOpen, ImGuiWindowFlags_AlwaysAutoResize)) {
-            ImGui::Text(currentError.c_str());
+        if (ImGui::BeginPopupModal("Ошибка", &errorPopupOpen,
+                                   ImGuiWindowFlags_AlwaysAutoResize)) {
+            ImGui::Text("%s", currentError.c_str());
             if (ImGui::Button("Закрыть", ImVec2(60, 0))) {
                 ImGui::CloseCurrentPopup();
                 errorPopupOpen = 0;
@@ -272,7 +277,7 @@ int main(int argc, char **argv) {
                     try {
                         frames = OpenFrameSequence();
                         fps = frames.GetFramerate();
-                    } catch (const std::invalid_argument& e) {
+                    } catch (const std::invalid_argument &e) {
                     } catch (const std::runtime_error &e) {
                         currentError = std::string(e.what());
                         errorPopupOpen = true;
@@ -296,16 +301,24 @@ int main(int argc, char **argv) {
             done = true;
         }
 
+        if (ImGui::Begin("События")) {
+            DisplayEvents(frames);
+            ImGui::End();
+        } else {
+            ImGui::End();
+        }
+
         if (ImGui::Begin("Таймлайн")) {
             DrawFrameSequenceTimeline("frames_timeline", frames, currentIndex,
-                                      playing, fps, zoom, markers);
+                                      playing, fps, zoom);
             ImGui::End();
         } else {
             ImGui::End();
         }
 
         std::shared_ptr<CCTV::IGLTexture> texture;
-        if (ImGui::Begin("Просмотр кадра", nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
+        if (ImGui::Begin("Просмотр кадра", nullptr,
+                         ImGuiWindowFlags_AlwaysAutoResize)) {
             if (frames.getLength() > 0) {
                 CCTV::Frame frame = frames.get(currentIndex);
                 texture = frame.GetTexture();
