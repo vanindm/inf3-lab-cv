@@ -39,9 +39,23 @@ static CCTV::FrameSequence OpenFrameSequence() {
     }
 }
 
-static void DisplayEvents(CCTV::FrameSequence &frames) {
-    ImGui::BeginChild("EventList", ImVec2(200, 200));
-    ImGui::Selectable("Событие 1");
+static void DisplayEvents(CCTV::FrameSequence &frames, int &currentIndex) {
+    ImGui::BeginChild("EventList");
+    if (frames.GetTagCount() > 0) {
+        auto enumerator = frames.GetTagEnumerator();
+        while (enumerator->moveNext()) {
+            CCTV::ITag* ptr = enumerator->current().getSecond();
+            if (ptr != nullptr) {
+                std::string label = ptr->GetName() + " на кадре " + std::to_string(enumerator->current().getFirst());
+                if (ImGui::Selectable(label.c_str())) {
+                    currentIndex = enumerator->current().getFirst();
+                }
+            }
+        }
+        delete enumerator;
+    } else {
+        ImGui::Text("Событий не произошло");
+    }
     ImGui::EndChild();
 }
 
@@ -81,8 +95,10 @@ static void DrawFrameSequenceTimeline(const char *id,
     ImGui::SliderFloat("К/с", &fps, 1.0f, 120.0f, "%.1f");
     ImGui::SliderInt("Размер окна", &windowLength, 0, frames.getLength());
     frames.SetWindow(windowLength);
-
     frames.SetFramerate(fps);
+    if (ImGui::Button("Предпосчитать")) {
+        frames.PrecalcScore();
+    }
 
     static float playAccum = 0.0f;
     if (playing) {
@@ -133,18 +149,6 @@ static void DrawFrameSequenceTimeline(const char *id,
                           ImVec2(x1, baseY + 6.0f + rowH), col);
         dl->AddRect(ImVec2(x0, baseY + 6.0f), ImVec2(x1, baseY + 6.0f + rowH),
                     border);
-
-        /*
-        for (int m = 0; m < markers.getLength(); ++m) {
-            if (markers.get(m) == i) {
-                ImVec2 a(x0 + 2.0f, baseY + 6.0f);
-                ImVec2 b(x0 + 10.0f, baseY + 6.0f);
-                ImVec2 c(x0 + 6.0f, baseY - 2.0f);
-                dl->AddTriangleFilled(a, b, c, IM_COL32(230, 170, 40, 255));
-                break;
-            }
-        }
-        */
     }
 
     if (hovered && ImGui::IsMouseClicked(ImGuiMouseButton_Left)) {
@@ -302,7 +306,7 @@ int main(int argc, char **argv) {
         }
 
         if (ImGui::Begin("События")) {
-            DisplayEvents(frames);
+            DisplayEvents(frames, currentIndex);
             ImGui::End();
         } else {
             ImGui::End();

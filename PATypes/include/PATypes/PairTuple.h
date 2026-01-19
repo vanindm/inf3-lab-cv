@@ -5,10 +5,20 @@
 namespace PATypes {
 template <class T, class U> class Pair {
   public:
+    Pair() : first(), second() {};
     Pair(T first, U second) : first(first), second(second) {};
     Pair(Pair &pair) : first(pair.getFirst()), second(pair.getSecond()) {};
+    Pair(Pair &&pair) : first(pair.getFirst()), second(pair.getSecond()) {};
     T &getFirst();
     U &getSecond();
+
+    Pair& operator=(const Pair& other) {
+      if (this != &other) {
+        first = std::move(other.first);
+        second = std::move(other.second);
+      }
+      return *this;
+    }
 
   private:
     T first;

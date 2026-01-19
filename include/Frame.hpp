@@ -21,6 +21,7 @@ extern "C" {
 }
 
 #include "AVHelper.hpp"
+#include "Tags.hpp"
 
 #define STB_IMAGE_IMPLEMENTATION
 #include "contrib/stb_image.h"
@@ -51,9 +52,10 @@ class IGLTexture {
     ~IGLTexture() {};
 };
 
-class Frame : public IFrame {
+class Frame : public IFrame, ITagged, std::enable_shared_from_this<Frame> {
     unsigned char *data;
     int width, height, channels;
+    std::shared_ptr<ITag> tag;
     class GLTexture : public IGLTexture {
         GLuint texture;
 
@@ -124,6 +126,8 @@ class Frame : public IFrame {
         if (data)
             stbi_image_free(data);
     }
+    virtual std::shared_ptr<ITag> GetTag() { return tag; }
+    virtual void SetTag(std::shared_ptr<ITag> tag) { this->tag = tag; }
     static std::shared_ptr<Frame> FromFile(const std::string &filename) {
         std::shared_ptr<Frame> newFrame = std::make_shared<Frame>(Frame());
         newFrame->data = stbi_load(filename.c_str(), &newFrame->width,
@@ -215,6 +219,8 @@ class Frame : public IFrame {
 class FrameSequence : public PATypes::MutableListSequence<Frame>,
                       public IScoreable {
     int windowLength;
+    static inline const double TRESHOLD = 200.f;
+    static inline const double LEAP_TRESHOLD = 100.f;
     double GetDeltaScore() {
         int lastIndex = getLength() - 1;
         if (lastIndex < 0 || windowLength < 2) {
@@ -236,13 +242,15 @@ class FrameSequence : public PATypes::MutableListSequence<Frame>,
             result += lastFrame.delta(get(r - i)).norm();
             lastFrame = get(r - i);
         }
-        return result / (double)windowLength;
+        return result;
     }
     PATypes::HashMap<int, double> cache;
+    PATypes::MutableArraySequence<PATypes::Pair<int, ITag *>> TagsByIndex;
     float frameRate;
 
   public:
-    FrameSequence() : PATypes::MutableListSequence<Frame>(), cache() {}
+    FrameSequence()
+        : PATypes::MutableListSequence<Frame>(), cache(), TagsByIndex() {}
     FrameSequence(Frame *items, int count, int windowLength)
         : PATypes::MutableListSequence<Frame>(items, count),
           windowLength(windowLength), cache(), frameRate(12) {}
@@ -256,10 +264,9 @@ class FrameSequence : public PATypes::MutableListSequence<Frame>,
           frameRate(sequence.frameRate) {}
     FrameSequence(FrameSequence &&sequence)
         : PATypes::MutableListSequence<Frame>(std::move(sequence)),
-          windowLength(sequence.windowLength),
-          frameRate(sequence.frameRate) {
-            cache = std::move(sequence.cache);
-          }
+          windowLength(sequence.windowLength), frameRate(sequence.frameRate) {
+        cache = std::move(sequence.cache);
+    }
     FrameSequence(int windowLength)
         : PATypes::MutableListSequence<Frame>(), windowLength(windowLength),
           cache(), frameRate(12) {}
@@ -400,7 +407,43 @@ class FrameSequence : public PATypes::MutableListSequence<Frame>,
             cache = PATypes::HashMap<int, double>();
         }
     }
+    int GetTagCount() { return TagsByIndex.getLength(); }
+    auto GetTagEnumerator() { return TagsByIndex.getEnumerator(); }
     int GetWindow() const { return windowLength; }
+    virtual void PrecalcScore() {
+        cache = PATypes::HashMap<int, double>();
+        TagsByIndex =
+            PATypes::MutableArraySequence<PATypes::Pair<int, ITag *>>();
+        double prevScore = 0.0f;
+        for (int r = 0; r < getLength(); ++r) {
+            double score = 0.0f;
+            if (r >= this->getLength()) {
+            } else {
+                try {
+                    score = cache.Get(r);
+                } catch (std::out_of_range &e) {
+                    try {
+                        cache.Add(r, GetDeltaScore2(r) * 1.0);
+                        score = cache.Get(r);
+                    } catch (std::out_of_range &e) {
+                        continue;
+                    }
+                }
+            }
+            if (std::fabs(score - prevScore) > LEAP_TRESHOLD) {
+                Frame &current = list.get(r);
+                current.SetTag((std::shared_ptr<ITag>)
+                                   std::make_shared<ScoreLeapTag>(&current));
+                TagsByIndex.append(PATypes::Pair(r, current.GetTag().get()));
+            } else if (score > TRESHOLD) {
+                Frame &current = list.get(r);
+                current.SetTag((std::shared_ptr<ITag>)
+                                   std::make_shared<HighScoreTag>(&current));
+                TagsByIndex.append(PATypes::Pair(r, current.GetTag().get()));
+            }
+            prevScore = score;
+        }
+    }
     virtual double GetScore(const std::optional<int> &r = std::nullopt) {
         if (r) {
             if (r >= this->getLength()) {
@@ -419,7 +462,7 @@ class FrameSequence : public PATypes::MutableListSequence<Frame>,
     }
     float GetFramerate() const { return frameRate; }
     void SetFramerate(const float &frameRate) { this->frameRate = frameRate; }
-    FrameSequence& operator=(const FrameSequence& other) {
+    FrameSequence &operator=(const FrameSequence &other) {
         if (this == &other)
             return *this;
         MutableListSequence<Frame>::operator=(other);
@@ -428,12 +471,13 @@ class FrameSequence : public PATypes::MutableListSequence<Frame>,
         frameRate = other.frameRate;
         return *this;
     }
-    FrameSequence& operator=(FrameSequence&& other) {
+    FrameSequence &operator=(FrameSequence &&other) {
         if (this == &other)
             return *this;
         MutableListSequence<Frame>::operator=(other);
         windowLength = other.windowLength;
         cache = std::move(other.cache);
+        TagsByIndex = std::move(other.TagsByIndex);
         frameRate = other.frameRate;
         return *this;
     }
