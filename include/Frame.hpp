@@ -219,8 +219,10 @@ class Frame : public IFrame, ITagged, std::enable_shared_from_this<Frame> {
 class FrameSequence : public PATypes::MutableListSequence<Frame>,
                       public IScoreable {
     int windowLength;
-    static inline const double TRESHOLD = 200.f;
-    static inline const double LEAP_TRESHOLD = 100.f;
+
+    double treshold = 200.f;
+    double leap_treshold = 100.f;
+
     double GetDeltaScore() {
         int lastIndex = getLength() - 1;
         if (lastIndex < 0 || windowLength < 2) {
@@ -249,18 +251,18 @@ class FrameSequence : public PATypes::MutableListSequence<Frame>,
     float frameRate;
 
   public:
-    FrameSequence()
+    FrameSequence(double treshold = 400.0f, double leap_treshold = 100.0f)
         : PATypes::MutableListSequence<Frame>(), cache(), TagsByIndex() {}
-    FrameSequence(Frame *items, int count, int windowLength)
+    FrameSequence(Frame *items, int count, int windowLength, double treshold = 400.0f, double leap_treshold = 100.0f)
         : PATypes::MutableListSequence<Frame>(items, count),
           windowLength(windowLength), cache(), frameRate(12) {}
-    FrameSequence(PATypes::Sequence<Frame> &sequence, int windowLength)
+    FrameSequence(PATypes::Sequence<Frame> &sequence, int windowLength, double treshold = 400.0f, double leap_treshold = 100.0f)
         : PATypes::MutableListSequence<Frame>(sequence),
           windowLength(windowLength), cache(), frameRate(12) {}
     FrameSequence(FrameSequence &sequence)
         : PATypes::MutableListSequence<Frame>(
               (PATypes::Sequence<Frame> &)sequence),
-          windowLength(sequence.windowLength), cache(sequence.cache),
+          windowLength(sequence.windowLength), treshold(sequence.treshold), leap_treshold(sequence.leap_treshold), cache(sequence.cache),
           frameRate(sequence.frameRate) {}
     FrameSequence(FrameSequence &&sequence)
         : PATypes::MutableListSequence<Frame>(std::move(sequence)),
@@ -430,12 +432,12 @@ class FrameSequence : public PATypes::MutableListSequence<Frame>,
                     }
                 }
             }
-            if (std::fabs(score - prevScore) > LEAP_TRESHOLD) {
+            if (std::fabs(score - prevScore) > leap_treshold) {
                 Frame &current = list.get(r);
                 current.SetTag((std::shared_ptr<ITag>)
                                    std::make_shared<ScoreLeapTag>(&current));
                 TagsByIndex.append(PATypes::Pair(r, current.GetTag().get()));
-            } else if (score > TRESHOLD) {
+            } else if (score > treshold) {
                 Frame &current = list.get(r);
                 current.SetTag((std::shared_ptr<ITag>)
                                    std::make_shared<HighScoreTag>(&current));

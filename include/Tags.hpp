@@ -21,6 +21,7 @@ class HighScoreTag : public ITag {
 
   public:
     HighScoreTag(void *parent) : parent(parent) {}
+    virtual ~HighScoreTag() {}
     virtual void *GetParent() { return parent; }
     virtual std::string GetName() { return "Высокая значимость"; }
 };
@@ -30,6 +31,7 @@ class ScoreLeapTag : public ITag {
 
   public:
     ScoreLeapTag(void *parent) : parent(parent) {}
+    virtual ~ScoreLeapTag() {}
     virtual void *GetParent() { return parent; }
     virtual std::string GetName() { return "Скачок значимости"; }
 };
@@ -39,6 +41,7 @@ class FlashTag : public ITag {
 
   public:
     FlashTag(void *parent) : parent(parent) {}
+    virtual ~FlashTag() {}
     virtual void *GetParent() { return parent; }
     virtual std::string GetName() { return "Вспышка"; }
 };
