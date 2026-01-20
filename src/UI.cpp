@@ -69,6 +69,9 @@ static void DrawFrameSequenceTimeline(const char *id,
         return;
     }
 
+    float treshold = frames.GetTreshold();
+    float leapTreshold = frames.GetLeapTreshold();
+
     currentIndex = std::clamp(currentIndex, 0, n - 1);
 
     if (ImGui::Button(playing ? "||" : "|>") || ImGui::Shortcut(ImGuiKey_Space))
@@ -94,8 +97,12 @@ static void DrawFrameSequenceTimeline(const char *id,
     ImGui::SliderInt("Кадр", &currentIndex, 0, n - 1);
     ImGui::SliderFloat("К/с", &fps, 1.0f, 120.0f, "%.1f");
     ImGui::SliderInt("Размер окна", &windowLength, 0, frames.getLength());
+    ImGui::SliderFloat("Порог значимости", &treshold, 0, 2000.f, "%.1f");
+    ImGui::SliderFloat("Порог скачка", &leapTreshold, 0, 1000.f, "%.1f");
     frames.SetWindow(windowLength);
     frames.SetFramerate(fps);
+    frames.SetTreshold(treshold);
+    frames.SetLeapTreshold(leapTreshold);
     if (ImGui::Button("Предпосчитать")) {
         frames.PrecalcScore();
     }

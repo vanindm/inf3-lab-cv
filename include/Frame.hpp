@@ -220,8 +220,8 @@ class FrameSequence : public PATypes::MutableListSequence<Frame>,
                       public IScoreable {
     int windowLength;
 
-    double treshold = 200.f;
-    double leap_treshold = 100.f;
+    float treshold;
+    float leapTreshold;
 
     double GetDeltaScore() {
         int lastIndex = getLength() - 1;
@@ -251,30 +251,40 @@ class FrameSequence : public PATypes::MutableListSequence<Frame>,
     float frameRate;
 
   public:
-    FrameSequence(double treshold = 400.0f, double leap_treshold = 100.0f)
-        : PATypes::MutableListSequence<Frame>(), cache(), TagsByIndex() {}
-    FrameSequence(Frame *items, int count, int windowLength, double treshold = 400.0f, double leap_treshold = 100.0f)
+    FrameSequence(float treshold = 400.0f, float leapTreshold = 100.0f)
+        : PATypes::MutableListSequence<Frame>(), treshold(treshold),
+          leapTreshold(leapTreshold), cache(), TagsByIndex() {}
+    FrameSequence(Frame *items, int count, int windowLength,
+                  float treshold = 400.0f, float leapTreshold = 100.0f)
         : PATypes::MutableListSequence<Frame>(items, count),
-          windowLength(windowLength), cache(), frameRate(12) {}
-    FrameSequence(PATypes::Sequence<Frame> &sequence, int windowLength, double treshold = 400.0f, double leap_treshold = 100.0f)
+          windowLength(windowLength), treshold(treshold),
+          leapTreshold(leapTreshold), cache(), frameRate(12) {}
+    FrameSequence(PATypes::Sequence<Frame> &sequence, int windowLength,
+                  float treshold = 400.0f, float leapTreshold = 100.0f)
         : PATypes::MutableListSequence<Frame>(sequence),
           windowLength(windowLength), cache(), frameRate(12) {}
     FrameSequence(FrameSequence &sequence)
         : PATypes::MutableListSequence<Frame>(
               (PATypes::Sequence<Frame> &)sequence),
-          windowLength(sequence.windowLength), treshold(sequence.treshold), leap_treshold(sequence.leap_treshold), cache(sequence.cache),
+          windowLength(sequence.windowLength), treshold(sequence.treshold),
+          leapTreshold(sequence.leapTreshold), cache(sequence.cache),
           frameRate(sequence.frameRate) {}
     FrameSequence(FrameSequence &&sequence)
         : PATypes::MutableListSequence<Frame>(std::move(sequence)),
-          windowLength(sequence.windowLength), frameRate(sequence.frameRate) {
+          windowLength(sequence.windowLength), treshold(sequence.treshold),
+          leapTreshold(sequence.treshold), frameRate(sequence.frameRate) {
         cache = std::move(sequence.cache);
     }
-    FrameSequence(int windowLength)
+    FrameSequence(int windowLength, float treshold = 400.0f,
+                  float leapTreshold = 100.0f)
         : PATypes::MutableListSequence<Frame>(), windowLength(windowLength),
-          cache(), frameRate(12) {}
-    FrameSequence(Frame item, int windowLength)
+          treshold(treshold), leapTreshold(leapTreshold), cache(),
+          frameRate(12) {}
+    FrameSequence(Frame item, int windowLength, float treshold = 400.0f,
+                  float leapTreshold = 100.0f)
         : PATypes::MutableListSequence<Frame>(), windowLength(windowLength),
-          cache(), frameRate(12) {}
+          treshold(treshold), leapTreshold(leapTreshold), cache(),
+          frameRate(12) {}
     static FrameSequence LoadFromVideo(const std::string &filename,
                                        int windowSize) {
         FrameSequence result(windowSize);
@@ -365,7 +375,6 @@ class FrameSequence : public PATypes::MutableListSequence<Frame>,
 
         return result;
     }
-
     virtual Sequence *append(Frame item) {
         cache = PATypes::HashMap<int, double>();
         return PATypes::MutableListSequence<Frame>::append(item);
@@ -432,7 +441,7 @@ class FrameSequence : public PATypes::MutableListSequence<Frame>,
                     }
                 }
             }
-            if (std::fabs(score - prevScore) > leap_treshold) {
+            if (std::fabs(score - prevScore) > leapTreshold) {
                 Frame &current = list.get(r);
                 current.SetTag((std::shared_ptr<ITag>)
                                    std::make_shared<ScoreLeapTag>(&current));
@@ -462,8 +471,16 @@ class FrameSequence : public PATypes::MutableListSequence<Frame>,
             return GetDeltaScore2(this->getLength() - 1) * 1.0;
         }
     }
+
     float GetFramerate() const { return frameRate; }
     void SetFramerate(const float &frameRate) { this->frameRate = frameRate; }
+
+    float GetTreshold() {return treshold;}
+    void SetTreshold(float treshold) { this->treshold = treshold; }
+    
+    float GetLeapTreshold() {return leapTreshold;}
+    void SetLeapTreshold(float treshold) { this->leapTreshold = treshold; }
+
     FrameSequence &operator=(const FrameSequence &other) {
         if (this == &other)
             return *this;
