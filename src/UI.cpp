@@ -304,7 +304,10 @@ int main(int argc, char **argv) {
 
         if (ImGui::Shortcut(ImGuiMod_Ctrl | ImGuiKey_O,
                             ImGuiInputFlags_RouteGlobal)) {
-            frames = OpenFrameSequence();
+            try {
+                frames = OpenFrameSequence();
+            } catch (std::invalid_argument&) {
+            }
         }
 
         if (ImGui::Shortcut(ImGuiMod_Ctrl | ImGuiKey_Q,
